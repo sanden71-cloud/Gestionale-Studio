@@ -54,7 +54,50 @@ def calcola_eta(data_nascita_str):
         oggi = date.today()
         return oggi.year - nascita.year - ((oggi.month, oggi.day) < (nascita.month, nascita.day))
     except:
-        return 30 
+        return 30
+
+def calcola_eta_anni_mesi(data_nascita_str):
+    """Restituisce (anni, mesi) per visualizzazione tipo '43 anni e 10 mesi'."""
+    try:
+        g, m, a = map(int, data_nascita_str.split('/'))
+        nascita = date(a, m, g)
+        oggi = date.today()
+        anni = oggi.year - nascita.year - ((oggi.month, oggi.day) < (nascita.month, nascita.day))
+        mesi = (oggi.month - nascita.month) + (oggi.day - nascita.day) / 31.0
+        if mesi < 0:
+            anni -= 1
+            mesi += 12
+        mesi = int(round(mesi)) % 12
+        return anni, mesi
+    except:
+        return 30, 0
+
+def calcola_info_visite(st_p_ord):
+    """Da DataFrame visite ordinate per data: ultima_data, giorni_da_ultima, n_visite, intervallo_medio_giorni."""
+    if st_p_ord is None or st_p_ord.empty:
+        return None, 0, 0, 0
+    n_visite = len(st_p_ord)
+    ultima_str = st_p_ord.iloc[-1]['Data_Visita']
+    try:
+        gg, mm, aa = map(int, ultima_str.split('/'))
+        ultima_data = date(aa, mm, gg)
+        giorni_da_ultima = (date.today() - ultima_data).days
+    except Exception:
+        ultima_data = None
+        giorni_da_ultima = 0
+    intervallo_medio = 0
+    if n_visite >= 2:
+        date_visite = []
+        for _, r in st_p_ord.iterrows():
+            try:
+                g, m, a = map(int, str(r['Data_Visita']).split('/'))
+                date_visite.append(date(a, m, g))
+            except Exception:
+                pass
+        date_visite.sort()
+        diff_giorni = [(date_visite[i+1] - date_visite[i]).days for i in range(len(date_visite)-1)]
+        intervallo_medio = int(round(sum(diff_giorni) / len(diff_giorni))) if diff_giorni else 0
+    return ultima_str, giorni_da_ultima, n_visite, intervallo_medio
 
 def calcola_stato_bmi(bmi):
     if bmi < 18.5: return "Sottopeso", "#3498db" 
@@ -214,6 +257,100 @@ st.markdown("""
         transform: translateY(-2px) !important;
         box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5) !important;
         background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+    }
+
+    /* --- Header bar stile Nutriverso (scuro, breadcrumb + CTA) --- */
+    .vlekt-navbar {
+        background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+        color: #f1f5f9;
+        padding: 12px 20px;
+        margin: -1rem -1rem 1rem -1rem;
+        border-bottom: 1px solid #334155;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 12px;
+        font-family: inherit;
+    }
+    .vlekt-navbar-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+    .vlekt-navbar-logo {
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: 0.5px;
+        color: #fff;
+    }
+    .vlekt-navbar-logo span { color: #38bdf8; }
+    .vlekt-breadcrumb {
+        font-size: 13px;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+    .vlekt-breadcrumb a { color: #94a3b8; text-decoration: none; }
+    .vlekt-breadcrumb a:hover { color: #38bdf8; }
+    .vlekt-navbar-btn {
+        display: inline-block;
+        background: #2563eb !important;
+        color: white !important;
+        padding: 8px 16px !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        text-decoration: none !important;
+        border: none !important;
+        box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+    }
+    .vlekt-navbar-btn:hover { background: #1d4ed8 !important; color: white !important; }
+
+    /* Tab orizzontali stile Nutriverso (sotto header paziente) */
+    .vlekt-tabs-wrap {
+        display: flex;
+        gap: 0;
+        border-bottom: 2px solid #e2e8f0;
+        margin-bottom: 16px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+    .vlekt-tab {
+        padding: 10px 18px;
+        color: #64748b;
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+    }
+    .vlekt-tab.active { color: #2563eb; border-bottom-color: #2563eb; }
+    .vlekt-tab:hover:not(.active) { color: #1e293b; }
+
+    /* Radio orizzontale come tab (Cruscotto / Piani / Integratori) */
+    div[data-testid="stRadio"] > div {
+        gap: 0 !important;
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 0;
+        margin-bottom: 12px;
+    }
+    div[data-testid="stRadio"] label {
+        padding: 10px 18px !important;
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #64748b !important;
+        border-radius: 0 !important;
+        border-bottom: 3px solid transparent !important;
+        margin-bottom: -2px !important;
+    }
+    div[data-testid="stRadio"] label:hover { color: #1e293b !important; }
+    div[data-testid="stRadio"] label[data-checked="true"],
+    div[data-testid="stRadio"] label:has(input:checked) {
+        color: #2563eb !important;
+        border-bottom-color: #2563eb !important;
+    }
+    /* Barra nome paziente sotto breadcrumb */
+    .vlekt-patient-name-bar {
+        font-size: 14px;
+        color: #475569;
+        font-weight: 600;
+        margin: -8px 0 12px 0;
+        padding: 6px 0;
+        border-bottom: 1px solid #f1f5f9;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -1595,6 +1732,40 @@ if _auth and st.session_state.get('show_admin'):
 
     st.stop()
 
+
+def _render_navbar():
+    """Barra superiore stile Nutriverso: logo + breadcrumb. Mostrata solo in area principale (non login, non admin)."""
+    p_r = st.session_state.p_attivo
+    show_utility = st.session_state.get("show_utility", False)
+    show_db_a = st.session_state.get("show_db_alimenti", False)
+    show_db_i = st.session_state.get("show_db_integratori", False)
+    show_db_p = st.session_state.get("show_db_proteine", False)
+
+    if show_utility:
+        bread = "Pazienti &gt; Utility"
+    elif show_db_a:
+        bread = "Database &gt; Alimenti VLEKT"
+    elif show_db_i:
+        bread = "Database &gt; Integratori"
+    elif show_db_p:
+        bread = "Database &gt; Proteine naturali"
+    elif p_r:
+        nome = f"{p_r.get('Cognome', '')} {p_r.get('Nome', '')}".strip() or "Paziente"
+        bread = f"Pazienti &gt; <span style='color:#f1f5f9;'>{nome}</span>"
+    else:
+        bread = "Pazienti &gt; Panoramica"
+
+    html = f"""
+    <div class="vlekt-navbar">
+        <div class="vlekt-navbar-left">
+            <span class="vlekt-navbar-logo">VLEKT <span>PRO</span></span>
+            <span class="vlekt-breadcrumb">{bread}</span>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+
+
 # --- 6. INTERFACCIA PRINCIPALE ---
 p_r = st.session_state.p_attivo
 idx_mod = st.session_state.idx_mod
@@ -1603,6 +1774,27 @@ if idx_mod is not None and (idx_mod >= len(df_p) or idx_mod not in df_p.index):
     st.session_state.idx_mod = None
     idx_mod = None
 d_form = df_p.iloc[idx_mod] if idx_mod is not None else p_r
+
+# Navbar stile Nutriverso (logo + breadcrumb) — sopra tutto il contenuto principale
+_render_navbar()
+
+# CTA principale (Nuova visita / Crea paziente) a destra sotto la navbar — solo su home e scheda paziente
+_show_nav_cta = not st.session_state.get("show_utility") and not st.session_state.get("show_db_alimenti") and not st.session_state.get("show_db_integratori") and not st.session_state.get("show_db_proteine")
+if _show_nav_cta:
+    _nav_cta_col1, _nav_cta_col2 = st.columns([5, 1])
+    with _nav_cta_col2:
+        if p_r is not None:
+            if st.button("Nuova visita", type="primary", key="navbar_nuova_visita", use_container_width=True):
+                st.session_state.m_modulo = True
+                st.session_state.idx_mod = None
+                st.rerun()
+        else:
+            if st.button("Crea paziente", type="primary", key="navbar_crea_paziente", use_container_width=True):
+                st.session_state.p_attivo = None
+                st.session_state.m_modulo = True
+                st.session_state.idx_mod = None
+                st.session_state.edit_anagrafica = False
+                st.rerun()
 
 # Inizializza session state integratori se mancanti
 if 'edit_integr_idx' not in st.session_state: st.session_state.edit_integr_idx = None
@@ -2230,7 +2422,8 @@ elif st.session_state.show_db_proteine:
 
 
 elif p_r is not None:
-    st.markdown(f"<h2 style='color: #2c3e50; font-weight: 900; letter-spacing: -1px;'>👤 Paziente: {p_r['Nome']} {p_r['Cognome']}</h2>", unsafe_allow_html=True)
+    _nome_paz = f"{p_r.get('Cognome', '')} {p_r.get('Nome', '')}".strip()
+    st.markdown(f"<div class='vlekt-patient-name-bar'>👤 {_nome_paz}</div>", unsafe_allow_html=True)
 
     tab_labels = ["📋 Cruscotto Visite", "🥑 Piani Alimentari VLEKT", "💊 Integratori & Prescrizioni"]
     if st.session_state.get('switch_to_prescrizioni'):
@@ -2256,6 +2449,32 @@ elif p_r is not None:
                 st.session_state.visita_idx_sel = indici_visite[0]
             idx_sel = st.session_state.visita_idx_sel
             rv_sel  = st_p_ord.loc[idx_sel]
+
+            # ── CARD DATI GENERALI + INFO VISITE (stile Nutriverso) ──
+            eta_anni, eta_mesi = calcola_eta_anni_mesi(p_r.get('Data_Nascita', '01/01/1990'))
+            sesso_label = "Femmina" if str(p_r.get('Sesso', '')).strip().upper() == 'F' else "Maschio"
+            ultima_visita_str, giorni_da_ultima, n_visite_tot, intervallo_medio = calcola_info_visite(st_p_ord)
+
+            col_dati_gen, col_info_vis = st.columns(2)
+            with col_dati_gen:
+                st.markdown("""
+                <div class="card" style="margin-bottom: 16px;">
+                    <h4 class="card-header-blue">Dati generali</h4>
+                    <div class="card-text">Sesso: """ + sesso_label + """</div>
+                    <div class="card-text">Età: """ + f"{eta_anni} anni e {eta_mesi} mesi" + """</div>
+                </div>""", unsafe_allow_html=True)
+                if st.button("Modifica anagrafica paziente", key="btn_mod_anag_card", use_container_width=True):
+                    st.session_state.edit_anagrafica = True
+                    st.rerun()
+            with col_info_vis:
+                st.markdown(f"""
+                <div class="card" style="margin-bottom: 16px;">
+                    <h4 class="card-header-green">Info visite</h4>
+                    <div class="card-text">Ultima visita: <b>{ultima_visita_str}</b></div>
+                    <div class="card-text">Giorni dall'ultima visita: <b>{giorni_da_ultima} giorni</b></div>
+                    <div class="card-text">Numero visite totali: <b>{n_visite_tot}</b></div>
+                    <div class="card-text">Intervallo medio visite: <b>{intervallo_medio} giorni</b></div>
+                </div>""", unsafe_allow_html=True)
 
             # ── LAYOUT: colonna sinistra = lista visite | destra = dettaglio/form ──
             col_lista, col_det = st.columns([1, 2.4])
@@ -2451,37 +2670,34 @@ elif p_r is not None:
                     tdee  = bmr * laf_num
 
                     st.markdown(f"""
-                    <div style="background:#f8fafc;border:1px solid #e0e6ed;border-left:4px solid #3b82f6;
-                         border-radius:10px;padding:18px 22px;margin-bottom:12px;">
-                        <div style="font-size:16px;font-weight:800;color:#1f2937;margin-bottom:14px;">
-                            📋 Visita del {rv_sel['Data_Visita']}
-                        </div>
+                    <div class="card" style="margin-bottom: 16px;">
+                        <h4 class="card-header-blue">Parametri principali della visita del {rv_sel['Data_Visita']}</h4>
                         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px;">
-                            <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #e5e7eb;">
-                                <div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;">Peso</div>
+                            <div style="background:#f8fafc;border-radius:8px;padding:10px 12px;border:1px solid #e5e7eb;">
+                                <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Peso</div>
                                 <div style="font-size:20px;font-weight:800;color:#111827;">{peso_u} <span style="font-size:12px;font-weight:400;">kg</span></div>
                             </div>
-                            <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #e5e7eb;">
-                                <div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;">BMI</div>
+                            <div style="background:#f8fafc;border-radius:8px;padding:10px 12px;border:1px solid #e5e7eb;">
+                                <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">BMI</div>
                                 <div style="font-size:20px;font-weight:800;color:{stato_c_s};">{bmi_u}</div>
                                 <div style="font-size:11px;color:{stato_c_s};">{stato_t_s}</div>
                             </div>
-                            <div style="background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #e5e7eb;">
-                                <div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;">Altezza</div>
+                            <div style="background:#f8fafc;border-radius:8px;padding:10px 12px;border:1px solid #e5e7eb;">
+                                <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Altezza</div>
                                 <div style="font-size:20px;font-weight:800;color:#111827;">{altezza_u} <span style="font-size:12px;font-weight:400;">cm</span></div>
                             </div>
                         </div>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
                             <div style="background:#fff8f0;border-radius:8px;padding:8px 12px;border:1px solid #fed7aa;">
-                                <div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;">BMR</div>
+                                <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">BMR</div>
                                 <div style="font-size:15px;font-weight:700;color:#ea580c;">{int(bmr)} <span style="font-size:11px;font-weight:400;">kcal</span></div>
                             </div>
                             <div style="background:#f0fdf4;border-radius:8px;padding:8px 12px;border:1px solid #bbf7d0;">
-                                <div style="font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;">TDEE</div>
+                                <div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">TDEE</div>
                                 <div style="font-size:15px;font-weight:700;color:#16a34a;">{int(tdee)} <span style="font-size:11px;font-weight:400;">kcal</span></div>
                             </div>
                         </div>
-                        <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#6b7280;border-top:1px solid #f3f4f6;padding-top:10px;">
+                        <div style="display:flex;flex-wrap:wrap;gap:14px;font-size:12px;color:#6b7280;border-top:1px solid #f1f5f9;padding-top:10px;">
                             <span>Addome: <b>{rv_sel['Addome']} cm</b></span>
                             <span>Fianchi: <b>{rv_sel['Fianchi']} cm</b></span>
                             <span>Torace: <b>{rv_sel['Torace']} cm</b></span>
@@ -2489,6 +2705,41 @@ elif p_r is not None:
                             <span>LAF: <b>{laf_str.split(' - ')[0] if ' - ' in laf_str else laf_str}</b></span>
                         </div>
                     </div>""", unsafe_allow_html=True)
+
+                    # ── CARD VARIAZIONI PESO (se almeno 2 visite) ──
+                    if len(st_p_ord) >= 2:
+                        peso_prima = to_f(st_p_ord.iloc[0]['Peso'])
+                        peso_ultima = to_f(st_p_ord.iloc[-1]['Peso'])
+                        try:
+                            pos_cur = st_p_ord.index.tolist().index(idx_sel)
+                            peso_visita_prec = to_f(st_p_ord.iloc[pos_cur - 1]['Peso']) if pos_cur > 0 else peso_u
+                        except (ValueError, KeyError):
+                            peso_visita_prec = peso_u
+                        delta_tot_kg = round(peso_ultima - peso_prima, 1)
+                        delta_tot_pct = round((delta_tot_kg / peso_prima * 100), 1) if peso_prima > 0 else 0
+                        delta_prec_kg = round(peso_u - peso_visita_prec, 1)
+                        delta_prec_pct = round((delta_prec_kg / peso_visita_prec * 100), 1) if peso_visita_prec > 0 else 0
+                        try:
+                            data_prima = st_p_ord.iloc[0]['Data_Visita'].split('/')
+                            data_ultima = st_p_ord.iloc[-1]['Data_Visita'].split('/')
+                            d1 = date(int(data_prima[2]), int(data_prima[1]), int(data_prima[0]))
+                            d2 = date(int(data_ultima[2]), int(data_ultima[1]), int(data_ultima[0]))
+                            mesi_tot = max(1, (d2 - d1).days / 30.0)
+                            media_mensile_kg = round((peso_ultima - peso_prima) / mesi_tot, 1)
+                            media_mensile_pct = round(delta_tot_pct / mesi_tot, 1) if mesi_tot else 0
+                        except Exception:
+                            media_mensile_kg = 0
+                            media_mensile_pct = 0
+                        col_neg = "#16a34a" if delta_tot_kg <= 0 else "#dc2626"
+                        st.markdown(f"""
+                        <div class="card" style="margin-bottom: 16px;">
+                            <h4 class="card-header-green">Variazioni peso</h4>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+                                <div><span style="color:#64748b;">Totale:</span> <b style="color:{col_neg};">{delta_tot_kg:+.1f} kg</b> ({delta_tot_pct:+.1f}%)</div>
+                                <div><span style="color:#64748b;">Dalla visita precedente:</span> <b style="color:{col_neg};">{delta_prec_kg:+.1f} kg</b> ({delta_prec_pct:+.1f}%)</div>
+                                <div><span style="color:#64748b;">Media mensile:</span> <b>{media_mensile_kg:+.1f} kg</b> ({media_mensile_pct:+.1f}%)</div>
+                            </div>
+                        </div>""", unsafe_allow_html=True)
 
                     # Note/Farmaci/Analisi
                     analisi_val = str(rv_sel.get('Analisi_Cliniche', '')).strip()
@@ -3580,15 +3831,18 @@ elif st.session_state.m_modulo:
 else:
     if not st.session_state.show_utility:
         st.markdown("""
-        <div style="text-align:center; padding: 28px 0 18px 0;">
-            <div style="font-size:38px; margin-bottom:6px;">👨‍⚕️</div>
-            <div style="font-size:26px; font-weight:900; color:#1a2332; letter-spacing:-0.5px;">Gestione Studio Nutrizionale</div>
-            <div style="font-size:13px; color:#9ca3af; margin-top:4px; font-weight:500;">VLEKT PRO — Pazienti recenti</div>
+        <div class="card" style="margin-bottom: 20px;">
+        <div style="text-align:center; padding: 20px 0 12px 0;">
+            <div style="font-size:32px; margin-bottom:6px;">👨‍⚕️</div>
+            <div style="font-size:22px; font-weight:900; color:#1a2332; letter-spacing:-0.5px;">Gestione Studio Nutrizionale</div>
+            <div style="font-size:12px; color:#64748b; margin-top:4px; font-weight:500;">VLEKT PRO — Pazienti recenti</div>
+        </div>
         </div>
         """, unsafe_allow_html=True)
 
     if not st.session_state.show_utility:
         if not df_p.empty:
+            st.markdown("<div class='card' style='padding: 18px 20px;'>", unsafe_allow_html=True)
             display_df = df_p.drop_duplicates('Codice_Fiscale', keep='last').copy()
             if 'Data_Visita' in display_df.columns:
                 display_df['DT_sort'] = pd.to_datetime(display_df['Data_Visita'], format='%d/%m/%Y', errors='coerce')
@@ -3651,5 +3905,6 @@ else:
 
                 st.markdown("<div style='border-bottom:1px solid #f3f4f6; margin-bottom:2px;'></div>", unsafe_allow_html=True)
 
+            st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.info("👈 Nessun paziente nel database. Utilizza la barra laterale per crearne uno nuovo.")
