@@ -3433,7 +3433,7 @@ elif st.session_state.m_modulo:
             st.markdown("**Data di Nascita**")
             g_np = [f"{i:02d}" for i in range(1, 32)]
             m_np = ["01","02","03","04","05","06","07","08","09","10","11","12"]
-            a_np = [str(a) for a in range(date.today().year - 100, date.today().year - 17)][::-1]
+            a_np = [str(a) for a in range(date.today().year - 100, date.today().year + 1)][::-1]
             cnp1, cnp2, cnp3 = st.columns(3)
             g_nasc = cnp1.selectbox("Giorno", g_np, key="np_g", label_visibility="collapsed")
             m_nasc = cnp2.selectbox("Mese", m_np, key="np_m", label_visibility="collapsed")
