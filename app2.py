@@ -2480,7 +2480,7 @@ elif p_r is not None:
             col_lista, col_det = st.columns([1, 2.4])
 
             with col_lista:
-                st.markdown("<div style='font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px;'>Storico visite</div>", unsafe_allow_html=True)
+                st.markdown("<div class='card' style='margin-bottom: 12px; padding: 16px;'><div style='font-size:12px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;'>Storico visite</div>", unsafe_allow_html=True)
 
                 # Raggruppa visite per mese (più recente prima)
                 mesi_it = ['','Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
@@ -2534,6 +2534,7 @@ elif p_r is not None:
                                     st.session_state.idx_mod = None
                                     st.rerun()
 
+                st.markdown("</div>", unsafe_allow_html=True)
                 st.markdown("<hr style='margin:12px 0;border-color:#e5e7eb;'>", unsafe_allow_html=True)
                 if not st.session_state.m_modulo:
                     if st.button("➕ Nuova Visita", use_container_width=True, type="primary"):
@@ -2659,6 +2660,35 @@ elif p_r is not None:
 
                 else:
                     # ── DETTAGLIO VISITA SELEZIONATA ──
+
+                    # Card "Elenco visite e appuntamenti" (tabella stile Nutriverso)
+                    st.markdown("<div class='card' style='margin-bottom: 16px;'><h4 class='card-header'>Elenco visite e appuntamenti</h4>", unsafe_allow_html=True)
+                    # Intestazione tabella
+                    _eh1, _eh2, _eh3, _eh4, _eh5 = st.columns([1.8, 0.7, 0.6, 1, 1])
+                    _eh1.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>Data</span>", unsafe_allow_html=True)
+                    _eh2.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>Peso</span>", unsafe_allow_html=True)
+                    _eh3.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>BMI</span>", unsafe_allow_html=True)
+                    _eh4.markdown(""); _eh5.markdown("")
+                    st.markdown("<div style='border-bottom:1px solid #e2e8f0;margin:2px 0 8px 0;'></div>", unsafe_allow_html=True)
+                    for _i, _rv in st_p_ord.iloc[::-1].iterrows():
+                        _is_sel = (_i == idx_sel)
+                        _bmi_v = to_f(_rv['BMI'])
+                        _, _bmi_c = calcola_stato_bmi(_bmi_v) if _bmi_v > 0 else ('—', '#94a3b8')
+                        _c1, _c2, _c3, _c4, _c5 = st.columns([1.8, 0.7, 0.6, 1, 1])
+                        _c1.markdown(f"<div style='font-size:13px;color:#334155;'>{_rv['Data_Visita']}</div>", unsafe_allow_html=True)
+                        _c2.markdown(f"<div style='font-size:13px;font-weight:600;'>{_rv['Peso']} kg</div>", unsafe_allow_html=True)
+                        _c3.markdown(f"<span style='font-size:13px;font-weight:700;color:{_bmi_c};'>{_rv['BMI']}</span>", unsafe_allow_html=True)
+                        if _c4.button("Apri visita", key=f"elenco_apri_{_i}", use_container_width=True, type="primary" if _is_sel else "secondary"):
+                            if _i != idx_sel:
+                                st.session_state.visita_idx_sel = _i
+                                st.rerun()
+                        if _c5.button("Apri diete", key=f"elenco_diete_{_i}", use_container_width=True):
+                            st.session_state.paziente_tab_radio = tab_labels[1]
+                            st.session_state.visita_idx_sel = _i
+                            st.rerun()
+                        st.markdown("<div style='border-bottom:1px solid #f1f5f9;margin-bottom:4px;'></div>", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+
                     stato_t_s, stato_c_s = calcola_stato_bmi(to_f(rv_sel['BMI']))
                     peso_u    = to_f(rv_sel['Peso'])
                     altezza_u = to_f(rv_sel['Altezza'])
