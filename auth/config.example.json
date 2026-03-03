@@ -1,0 +1,4 @@
+{
+  "license_key": "LA_TUA_CHIAVE_LICENZA_QUI",
+  "comment": "Rinomina questo file in config.json e inserisci la chiave. Oppure usa la variabile d'ambiente VLEKT_LICENSE_KEY."
+}

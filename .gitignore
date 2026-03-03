@@ -1,0 +1,18 @@
+# Dati sensibili - non committare
+auth/users.json
+auth/config.json
+
+# Dati utenti (opzionale: se vuoi tenere i dati fuori dal repo)
+# data/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# IDE
+.cursor/

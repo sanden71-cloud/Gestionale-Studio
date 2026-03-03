@@ -1,0 +1,24 @@
+Data_Visita,Nome,Cognome,Codice_Fiscale,Data_Nascita,Luogo_Nascita,Indirizzo,Sesso,Cellulare,Email,Altezza,Peso,BMI,Addome,Fianchi,Torace,Polso,Analisi_Cliniche,Farmaci,Note,LAF,Peso_Target,Circ_Polso_Dx,Circ_Polso_Sx,Circ_Avambraccio_Dx,Circ_Avambraccio_Sx,Circ_Braccio_Dx,Circ_Braccio_Sx,Circ_Spalle,Circ_Torace_Ant,Circ_Vita,Circ_Addome_Ant,Circ_Fianchi_Ant,Circ_Coscia_Prox_Dx,Circ_Coscia_Prox_Sx,Circ_Coscia_Med_Dx,Circ_Coscia_Med_Sx,Circ_Coscia_Dist_Dx,Circ_Coscia_Dist_Sx,Circ_Polpaccio_Dx,Circ_Polpaccio_Sx,Circ_Caviglia_Dx,Circ_Caviglia_Sx,Plica_Avambraccio,Plica_Bicipitale,Plica_Tricipitale,Plica_Ascellare,Plica_Pettorale,Plica_Sottoscapolare,Plica_Addominale,Plica_Soprailiaca,Plica_Coscia_Med,Plica_Soprapatellare,Plica_Polpaccio_Med,Plica_Sopraspinale,Diam_Polso,Diam_Gomito,Diam_Biacromiale,Diam_Toracico,Diam_Bicrestale,Diam_Addominale_Sag,Diam_Bitrocanterio,Diam_Ginocchio,Diam_Caviglia,Note_Antropometria
+01/03/2026,mario,rossi,RSSMRA03M01L628X,01/08/2003,VALLO DELLA LUCANIA,,M,,,173,98.0,32.7,,,,,,,prima visita,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+01/03/2026,christian,dente,DNTCRS05P30A717G,30/09/2005,BATTIPAGLIA,"Via Tanagro, 12 84132 Salerno",M,3924561234,chrisden2005@gmail.com,165,50.0,18.37,80.0,90.0,90.0,0.0,nessuna,nessuno,nessuna,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+02/03/2026,christian,dente,DNTCRS05P30A717G,30/09/2005,BATTIPAGLIA,"Via Tanagro, 12 84132 Salerno",M,3924561234,chrisden2005@gmail.com,165,48.0,17.63,65.0,90.0,90.0,17.0,"nessuna
+",nessuno,nessuna,1.2 - Sedentario,61.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+01/03/2026,Gialli,Mario,MRAGLL54A01F205U,01/01/1954,Milano,"Via Manganario, 35/B",M,3201234567,gialli@libero.it,170,120.0,41.52,120.0,110.0,99.0,18.0,Colesterolo,Liposuril,,1.2 - Sedentario,89.0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+04/03/2026,christian,dente,DNTCRS05P30A717G,30/09/2005,BATTIPAGLIA,"Via Tanagro, 12 84132 Salerno",M,3924561234,chrisden2005@gmail.com,165,48.0,17.63,65.0,90.0,90.0,17.0,"nessuna
+",nessuno,ok,1.2 - Sedentario,61.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+01/03/2026,christian,dente,DNTCRS05P30A717G,30/09/2005,BATTIPAGLIA,"Via Tanagro, 12 84132 Salerno",M,3924561234,chrisden2005@gmail.com,165,48.0,17.63,65.0,90.0,90.0,17.0,"nessuna
+",nessuno,ok,1.2 - Sedentario,61.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+01/03/2026,christian,dente,DNTCRS05P30A717G,30/09/2005,BATTIPAGLIA,"Via Tanagro, 12 84132 Salerno",M,3924561234,chrisden2005@gmail.com,165,48.0,17.63,65.0,90.0,90.0,17.0,"nessuna
+",nessuno,ok,1.2 - Sedentario,61.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+01/03/2026,Palumbo,Donatella,DNTPMB72S68H703Z,28/11/1972,Salerno,,F,3933160551,donatella@lineadiciotto.it,170,0.0,0.0,0.0,0.0,0.0,0.0,,,,1.2 - Sedentario,65.0,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+02/03/2026,christian,dente,DNTCRS05P30A717G,30/09/2005,BATTIPAGLIA,"Via Tanagro, 12 84132 Salerno",M,3924561234,chrisden2005@gmail.com,165,48.0,17.63,65.0,90.0,90.0,17.0,"nessuna
+",nessuno,ok,1.2 - Sedentario,61.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+02/03/2026,christian,dente,DNTCRS05P30A717G,30/09/2005,BATTIPAGLIA,"Via Tanagro, 12 84132 Salerno",M,3924561234,chrisden2005@gmail.com,165,48.0,17.63,65.0,90.0,90.0,17.0,"nessuna
+",nessuno,ok,1.2 - Sedentario,61.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+01/03/2026,christian,dente,DNTCRS05P30A717G,30/09/2005,BATTIPAGLIA,"Via Tanagro, 12 84132 Salerno",M,3924561234,chrisden2005@gmail.com,165,48.0,17.63,65.0,90.0,90.0,17.0,"nessuna
+",nessuno,ok,1.2 - Sedentario,61.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+01/02/2026,christian,dente,DNTCRS05P30A717G,30/09/2005,BATTIPAGLIA,"Via Tanagro, 12 84132 Salerno",M,3924561234,chrisden2005@gmail.com,165,48.0,17.63,65.0,90.0,90.0,17.0,"nessuna
+",nessuno,ok,1.2 - Sedentario,61.3,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+02/02/2026,Alessandro,Dente,DNTLSN71R10H703Z,10/10/1971,SALERNO,,M,,,170,100.0,34.6,96.0,100.0,90.0,17.0,,Rosumibe 5/10,,1.2 - Sedentario,90.0,17.0,0.0,0.0,0.0,0.0,12.0,0.0,90.0,80.0,96.0,100.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
+02/03/2026,Alessandro,Dente,DNTLSN71R10H703Z,10/10/1971,SALERNO,,M,,,170,85.0,29.41,92.0,98.0,90.0,0.0,,,,1.2 - Sedentario,90.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,90.0,80.0,92.0,98.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
+02/03/2026,Palumbo,Donatella,DNTPMB72S68H703Z,28/11/1972,Salerno,,F,3933160551,donatella@lineadiciotto.it,170,0.0,0.0,0.0,0.0,0.0,0.0,,,,1.2 - Sedentario,65.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,
