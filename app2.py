@@ -3887,10 +3887,9 @@ else:
         st.markdown(f"""
         <div class="card" style="margin-bottom: 16px; padding: 12px 20px;">
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                <div>
                     <span style="font-size: 18px; font-weight: 800; color: #1a2332;">Gestione Studio Nutrizionale</span>
-                    <span style="font-size: 15px; color: #475569; font-weight: 600;">— programma realizzato per il Dott. Aurelio Dente</span>
-                    <span style="font-size: 11px; color: #94a3b8;">VLEKT PRO</span>
+                    <span style="font-size: 11px; color: #94a3b8; margin-left: 8px;">VLEKT PRO</span>
                 </div>
                 <div style="display: flex; gap: 20px; font-size: 13px;">
                     <span><b style="color:#2563eb;">{n_paz}</b> <span style="color:#64748b;">pazienti</span></span>
