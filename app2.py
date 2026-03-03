@@ -352,6 +352,13 @@ st.markdown("""
         padding: 6px 0;
         border-bottom: 1px solid #f1f5f9;
     }
+    /* Pulsante disabilitato (es. Apri diete quando nessuna dieta) */
+    button:disabled {
+        background-color: #e2e8f0 !important;
+        color: #94a3b8 !important;
+        cursor: not-allowed !important;
+        border-color: #cbd5e1 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -1778,23 +1785,17 @@ d_form = df_p.iloc[idx_mod] if idx_mod is not None else p_r
 # Navbar stile Nutriverso (logo + breadcrumb) — sopra tutto il contenuto principale
 _render_navbar()
 
-# CTA principale (Nuova visita / Crea paziente) a destra sotto la navbar — solo su home e scheda paziente
+# CTA principale solo su home: "Crea paziente". Su scheda paziente "Nuova visita" resta solo nella colonna Storico visite (niente duplicato in navbar)
 _show_nav_cta = not st.session_state.get("show_utility") and not st.session_state.get("show_db_alimenti") and not st.session_state.get("show_db_integratori") and not st.session_state.get("show_db_proteine")
-if _show_nav_cta:
+if _show_nav_cta and p_r is None:
     _nav_cta_col1, _nav_cta_col2 = st.columns([5, 1])
     with _nav_cta_col2:
-        if p_r is not None:
-            if st.button("Nuova visita", type="primary", key="navbar_nuova_visita", use_container_width=True):
-                st.session_state.m_modulo = True
-                st.session_state.idx_mod = None
-                st.rerun()
-        else:
-            if st.button("Crea paziente", type="primary", key="navbar_crea_paziente", use_container_width=True):
-                st.session_state.p_attivo = None
-                st.session_state.m_modulo = True
-                st.session_state.idx_mod = None
-                st.session_state.edit_anagrafica = False
-                st.rerun()
+        if st.button("Crea paziente", type="primary", key="navbar_crea_paziente", use_container_width=True):
+            st.session_state.p_attivo = None
+            st.session_state.m_modulo = True
+            st.session_state.idx_mod = None
+            st.session_state.edit_anagrafica = False
+            st.rerun()
 
 # Inizializza session state integratori se mancanti
 if 'edit_integr_idx' not in st.session_state: st.session_state.edit_integr_idx = None
@@ -2429,6 +2430,11 @@ elif p_r is not None:
     if st.session_state.get('switch_to_prescrizioni'):
         st.session_state.paziente_tab_radio = tab_labels[2]
         st.session_state.switch_to_prescrizioni = False
+        st.rerun()
+    if st.session_state.get('switch_to_piani'):
+        st.session_state.paziente_tab_radio = tab_labels[1]
+        st.session_state.switch_to_piani = False
+        st.rerun()
     paziente_tab = st.radio("", tab_labels, horizontal=True, key="paziente_tab_radio", label_visibility="collapsed")
 
     cf_attivo = str(p_r.get('Codice_Fiscale','')).strip()
@@ -2463,9 +2469,6 @@ elif p_r is not None:
                     <div class="card-text">Sesso: """ + sesso_label + """</div>
                     <div class="card-text">Età: """ + f"{eta_anni} anni e {eta_mesi} mesi" + """</div>
                 </div>""", unsafe_allow_html=True)
-                if st.button("Modifica anagrafica paziente", key="btn_mod_anag_card", use_container_width=True):
-                    st.session_state.edit_anagrafica = True
-                    st.rerun()
             with col_info_vis:
                 st.markdown(f"""
                 <div class="card" style="margin-bottom: 16px;">
@@ -2661,32 +2664,34 @@ elif p_r is not None:
                 else:
                     # ── DETTAGLIO VISITA SELEZIONATA ──
 
-                    # Card "Elenco visite e appuntamenti" (tabella stile Nutriverso)
+                    # Card "Elenco visite e appuntamenti" — 1 click per aprire: clicca sulla riga (Data|Peso|BMI)
+                    _col_w = [3.5, 1.1]
                     st.markdown("<div class='card' style='margin-bottom: 16px;'><h4 class='card-header'>Elenco visite e appuntamenti</h4>", unsafe_allow_html=True)
-                    # Intestazione tabella
-                    _eh1, _eh2, _eh3, _eh4, _eh5 = st.columns([1.8, 0.7, 0.6, 1, 1])
-                    _eh1.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>Data</span>", unsafe_allow_html=True)
-                    _eh2.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>Peso</span>", unsafe_allow_html=True)
-                    _eh3.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>BMI</span>", unsafe_allow_html=True)
-                    _eh4.markdown(""); _eh5.markdown("")
-                    st.markdown("<div style='border-bottom:1px solid #e2e8f0;margin:2px 0 8px 0;'></div>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size:11px;color:#94a3b8;margin-bottom:8px;'>Clicca sulla visita per aprirla (1 click) · Usa <b>Apri diete</b> per i piani alimentari</div>", unsafe_allow_html=True)
+                    _eh1, _eh2 = st.columns(_col_w)
+                    _eh1.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>Visita</span>", unsafe_allow_html=True)
+                    _eh2.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>Apri diete</span>", unsafe_allow_html=True)
+                    st.markdown("<div style='border-bottom:1px solid #e2e8f0;margin:4px 0 10px 0;'></div>", unsafe_allow_html=True)
                     for _i, _rv in st_p_ord.iloc[::-1].iterrows():
                         _is_sel = (_i == idx_sel)
                         _bmi_v = to_f(_rv['BMI'])
                         _, _bmi_c = calcola_stato_bmi(_bmi_v) if _bmi_v > 0 else ('—', '#94a3b8')
-                        _c1, _c2, _c3, _c4, _c5 = st.columns([1.8, 0.7, 0.6, 1, 1])
-                        _c1.markdown(f"<div style='font-size:13px;color:#334155;'>{_rv['Data_Visita']}</div>", unsafe_allow_html=True)
-                        _c2.markdown(f"<div style='font-size:13px;font-weight:600;'>{_rv['Peso']} kg</div>", unsafe_allow_html=True)
-                        _c3.markdown(f"<span style='font-size:13px;font-weight:700;color:{_bmi_c};'>{_rv['BMI']}</span>", unsafe_allow_html=True)
-                        if _c4.button("Apri visita", key=f"elenco_apri_{_i}", use_container_width=True, type="primary" if _is_sel else "secondary"):
+                        _data_vis = str(_rv['Data_Visita']).strip()
+                        _has_diete = (not df_d.empty) and (
+                            (df_d['Codice_Fiscale'].astype(str).str.strip() == cf_attivo) &
+                            (df_d['Data_Visita'].astype(str).str.strip() == _data_vis)
+                        ).any()
+                        _row_label = f"{_rv['Data_Visita']}  ·  {_rv['Peso']} kg  ·  BMI {_rv['BMI']}"
+                        _c1, _c2 = st.columns(_col_w)
+                        if _c1.button(_row_label, key=f"elenco_apri_{_i}", use_container_width=True, type="primary" if _is_sel else "secondary", help="Clicca per aprire questa visita"):
                             if _i != idx_sel:
                                 st.session_state.visita_idx_sel = _i
                                 st.rerun()
-                        if _c5.button("Apri diete", key=f"elenco_diete_{_i}", use_container_width=True):
-                            st.session_state.paziente_tab_radio = tab_labels[1]
+                        if _c2.button("Apri diete", key=f"elenco_diete_{_i}", use_container_width=True, disabled=not _has_diete, help="Nessuna dieta per questa visita" if not _has_diete else "Vai ai piani alimentari"):
+                            st.session_state.switch_to_piani = True
                             st.session_state.visita_idx_sel = _i
                             st.rerun()
-                        st.markdown("<div style='border-bottom:1px solid #f1f5f9;margin-bottom:4px;'></div>", unsafe_allow_html=True)
+                        st.markdown("<div style='border-bottom:1px solid #f1f5f9;margin-bottom:6px;'></div>", unsafe_allow_html=True)
                     st.markdown("</div>", unsafe_allow_html=True)
 
                     stato_t_s, stato_c_s = calcola_stato_bmi(to_f(rv_sel['BMI']))
@@ -2899,9 +2904,15 @@ elif p_r is not None:
                             st.session_state.confirm_delete_paz = False; st.rerun()
 
         else:
-            st.info("Nessuna visita registrata. Clicca su 'Nuova Visita'.")
-            if st.button("➕ REGISTRA PRIMA VISITA", type="primary"):
-                st.session_state.m_modulo = True; st.rerun()
+            st.markdown("""
+            <div class="card" style="text-align: center; padding: 32px 24px;">
+                <div style="font-size: 48px; margin-bottom: 12px;">📋</div>
+                <div style="font-size: 18px; font-weight: 800; color: #334155; margin-bottom: 8px;">Nessuna visita registrata</div>
+                <div style="font-size: 14px; color: #64748b; margin-bottom: 20px;">Registra la prima visita per vedere il cruscotto, i parametri e le variazioni peso.</div>
+            </div>""", unsafe_allow_html=True)
+            if st.button("➕ Registra prima visita", type="primary", use_container_width=True):
+                st.session_state.m_modulo = True
+                st.rerun()
 
         # ── MODIFICA ANAGRAFICA ──
         if st.session_state.edit_anagrafica:
@@ -3570,25 +3581,35 @@ elif p_r is not None:
                     template_name = PDF_PIANI.get((sesso_paz, step_sel), '')
                     st.warning(f"⚠️ Template PDF non trovato: `{template_name}` — copialo nella stessa cartella dell'app.")
         else:
-            st.warning("⚠️ Devi registrare almeno una visita prima di poter assegnare un piano alimentare.")
+            st.markdown("""
+            <div class="card" style="text-align: center; padding: 28px 24px;">
+                <div style="font-size: 42px; margin-bottom: 10px;">🥑</div>
+                <div style="font-size: 17px; font-weight: 800; color: #334155; margin-bottom: 6px;">Nessuna visita disponibile</div>
+                <div style="font-size: 13px; color: #64748b; margin-bottom: 16px;">Registra almeno una visita nel <b>Cruscotto Visite</b> per poter creare un piano alimentare.</div>
+            </div>""", unsafe_allow_html=True)
 
     elif paziente_tab == tab_labels[2]:
-        st.subheader("💊 Integratori e Prescrizioni")
         _n_visite = len(date_visite_disponibili) if date_visite_disponibili else 0
         if _n_visite == 0:
-            st.warning("Devi registrare almeno una visita prima di prescrivere gli integratori.")
-            st.info("👉 Vai nel tab **Cruscotto Visite** e clicca **Nuova Visita** per registrare la prima visita.")
+            st.markdown("""
+            <div class="card" style="text-align: center; padding: 28px 24px;">
+                <div style="font-size: 42px; margin-bottom: 10px;">💊</div>
+                <div style="font-size: 17px; font-weight: 800; color: #334155; margin-bottom: 6px;">Nessuna visita disponibile</div>
+                <div style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Registra almeno una visita nel <b>Cruscotto Visite</b> per prescrivere integratori.</div>
+                <div style="font-size: 12px; color: #94a3b8;">Vai nel tab Cruscotto Visite e clicca <b>Nuova visita</b>.</div>
+            </div>""", unsafe_allow_html=True)
         else:
             visita_corrente = st_p_ord.iloc[-1]['Data_Visita']
-            # Normalizza date per selectbox
             date_visite_str = [str(d) for d in date_visite_disponibili]
             idx_default_pr = max(0, len(date_visite_str) - 1)
+            st.markdown("<div class='card' style='margin-bottom: 16px;'><h4 class='card-header-green'>💊 Integratori e Prescrizioni</h4>", unsafe_allow_html=True)
             visita_prescr = st.selectbox(
                 "Visita di riferimento:",
                 date_visite_str,
                 index=idx_default_pr,
                 key="sel_visita_prescr"
             )
+            st.markdown("</div>", unsafe_allow_html=True)
 
             df_pr_fresh = carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
             prescr_visita = df_pr_fresh[
@@ -3860,13 +3881,23 @@ elif st.session_state.m_modulo:
 # CASO 3: SCHERMATA HOME (non mostrata quando si è in Utility)
 else:
     if not st.session_state.show_utility:
-        st.markdown("""
-        <div class="card" style="margin-bottom: 20px;">
-        <div style="text-align:center; padding: 20px 0 12px 0;">
-            <div style="font-size:32px; margin-bottom:6px;">👨‍⚕️</div>
-            <div style="font-size:22px; font-weight:900; color:#1a2332; letter-spacing:-0.5px;">Gestione Studio Nutrizionale</div>
-            <div style="font-size:12px; color:#64748b; margin-top:4px; font-weight:500;">VLEKT PRO — Pazienti recenti</div>
-        </div>
+        n_paz = len(df_p.drop_duplicates('Codice_Fiscale')) if not df_p.empty else 0
+        n_visite = len(df_p) if not df_p.empty else 0
+        n_ali = len(df_a) if not df_a.empty else 0
+        st.markdown(f"""
+        <div class="card" style="margin-bottom: 16px; padding: 12px 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                    <span style="font-size: 18px; font-weight: 800; color: #1a2332;">Gestione Studio Nutrizionale</span>
+                    <span style="font-size: 15px; color: #475569; font-weight: 600;">— programma realizzato per il Dott. Aurelio Dente</span>
+                    <span style="font-size: 11px; color: #94a3b8;">VLEKT PRO</span>
+                </div>
+                <div style="display: flex; gap: 20px; font-size: 13px;">
+                    <span><b style="color:#2563eb;">{n_paz}</b> <span style="color:#64748b;">pazienti</span></span>
+                    <span><b style="color:#16a34a;">{n_visite}</b> <span style="color:#64748b;">visite</span></span>
+                    <span><b style="color:#64748b;">{n_ali}</b> <span style="color:#94a3b8;">alimenti in DB</span></span>
+                </div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
