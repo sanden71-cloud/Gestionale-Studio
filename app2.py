@@ -99,6 +99,27 @@ def calcola_info_visite(st_p_ord):
         intervallo_medio = int(round(sum(diff_giorni) / len(diff_giorni))) if diff_giorni else 0
     return ultima_str, giorni_da_ultima, n_visite, intervallo_medio
 
+def _norm_data_visita(s):
+    """Normalizza una data in formato d/m/yyyy, dd/mm/yyyy o yyyy-mm-dd in dd/mm/yyyy per confronti robusti."""
+    try:
+        s = str(s).strip()
+        if not s or s == 'nan':
+            return ''
+        # Formato ISO (yyyy-mm-dd o yyyy-m-d)
+        if '-' in s and '/' not in s:
+            parts = s.split('-')
+            if len(parts) == 3:
+                a, m, g = parts[0], parts[1], parts[2]
+                return f"{int(g):02d}/{int(m):02d}/{int(a)}"
+        # Formato italiano (d/m/yyyy o dd/mm/yyyy)
+        parts = s.split('/')
+        if len(parts) == 3:
+            g, m, a = int(parts[0]), int(parts[1]), int(parts[2])
+            return f"{g:02d}/{m:02d}/{a}"
+    except Exception:
+        pass
+    return str(s).strip()
+
 def calcola_stato_bmi(bmi):
     if bmi < 18.5: return "Sottopeso", "#3498db" 
     elif bmi < 25.0: return "Normopeso", "#2ecc71" 
@@ -114,8 +135,8 @@ def calcola_bmr(peso, altezza, eta, sesso):
 # --- 1.5 INIEZIONE CSS PER GRAFICA A "SCHEDE" (GARANTITA AL 100%) ---
 st.markdown("""
 <style>
-    /* Sfondo grigio chiaro per far risaltare il bianco delle schede */
-    .stApp { background-color: #f4f7f6; }
+    /* Sfondo grigio medio-chiaro per contrasto con le card bianche (campi più visibili) */
+    .stApp { background-color: #e2e6e5; }
 
     /* Pulsanti primary: colore pastello professionale al posto del rosso */
     button[kind="primary"] {
@@ -152,6 +173,15 @@ st.markdown("""
         font-size: 18px;
         font-weight: 800;
         border-bottom: 3px solid #2ecc71;
+        padding-bottom: 8px;
+        margin-bottom: 15px;
+        margin-top: 0;
+    }
+    .card-header-orange {
+        color: #2c3e50;
+        font-size: 18px;
+        font-weight: 800;
+        border-bottom: 3px solid #f5c99a;
         padding-bottom: 8px;
         margin-bottom: 15px;
         margin-top: 0;
@@ -259,7 +289,7 @@ st.markdown("""
         background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
     }
 
-    /* --- Header bar stile Nutriverso (scuro, breadcrumb + CTA) --- */
+    /* --- Header bar (scuro, breadcrumb) --- */
     .vlekt-navbar {
         background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
         color: #f1f5f9;
@@ -280,7 +310,8 @@ st.markdown("""
         letter-spacing: 0.5px;
         color: #fff;
     }
-    .vlekt-navbar-logo span { color: #38bdf8; }
+    .vlekt-navbar-logo span { color: #f5c99a; }
+    .vlekt-navbar { box-shadow: 0 2px 0 rgba(245, 201, 154, 0.35); }
     .vlekt-breadcrumb {
         font-size: 13px;
         color: #94a3b8;
@@ -302,7 +333,7 @@ st.markdown("""
     }
     .vlekt-navbar-btn:hover { background: #1d4ed8 !important; color: white !important; }
 
-    /* Tab orizzontali stile Nutriverso (sotto header paziente) */
+    /* Tab orizzontali (sotto header paziente) */
     .vlekt-tabs-wrap {
         display: flex;
         gap: 0;
@@ -352,6 +383,10 @@ st.markdown("""
         padding: 6px 0;
         border-bottom: 1px solid #f1f5f9;
     }
+    /* Testi secondari e caption più leggibili su sfondo scuro */
+    [data-testid="stCaptionContainer"], .stCaption, p[data-testid="stCaptionContainer"] {
+        color: #4b5563 !important;
+    }
     /* Pulsante disabilitato (es. Apri diete quando nessuna dieta) */
     button:disabled {
         background-color: #e2e8f0 !important;
@@ -362,11 +397,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- HEADER SPONSOR (LINEADICIOTTO) ---
+# --- HEADER SPONSOR (LINEADICIOTTO) — arancione pastello in linea con i colori sociali ---
 st.markdown("""
-<div style="text-align: center; padding: 10px; background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%); border-radius: 8px; margin-bottom: 15px; border: 1px solid #e0e6ed; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
-    <p style="color: #7f8c8d; margin: 0; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Software Nutrizionale in comodato d'uso da <span style="color: #2c3e50; font-weight: 900; font-size: 14px; letter-spacing: 1px; margin-left: 5px;">LINEADICIOTTO</span></p>
-    <a href="https://www.lineadiciotto.it" target="_blank" style="color: #3498db; text-decoration: none; font-weight: 600; font-size: 12px;">🌐 www.lineadiciotto.it</a>
+<div style="text-align: center; padding: 10px; background: linear-gradient(135deg, #fffaf5 0%, #fef8f0 50%, #f8f9fa 100%); border-radius: 8px; margin-bottom: 15px; border: 1px solid #f5dcc6; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+    <p style="color: #6b7280; margin: 0; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Software Nutrizionale in comodato d'uso da <span style="color: #2c3e50; font-weight: 900; font-size: 14px; letter-spacing: 1px; margin-left: 5px;">LINEADICIOTTO</span></p>
+    <a href="https://www.lineadiciotto.it" target="_blank" style="color: #c47222; text-decoration: none; font-weight: 600; font-size: 12px;">🌐 www.lineadiciotto.it</a>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1479,28 +1514,31 @@ if 'show_db_alimenti' not in st.session_state: st.session_state.show_db_alimenti
 if 'show_db_integratori' not in st.session_state: st.session_state.show_db_integratori = False
 if 'show_db_proteine' not in st.session_state: st.session_state.show_db_proteine = False
 if 'show_utility' not in st.session_state: st.session_state.show_utility = False
+if 'show_admin_section' not in st.session_state: st.session_state.show_admin_section = False
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
     # Blocco Utente
     if _auth:
         st.caption(f"👤 {st.session_state.logged_user}")
-        if st.button("🚪 Esci", use_container_width=True, key="btn_logout"):
+        if st.button("🏠 Home", use_container_width=True, key="btn_home"):
+            st.session_state.p_attivo = None
+            st.session_state.m_modulo = False
+            st.session_state.show_utility = False
+            st.session_state.show_admin_section = False
+            st.session_state.show_db_alimenti = False
+            st.session_state.show_db_integratori = False
+            st.session_state.show_db_proteine = False
+            st.session_state.visita_idx_sel = None
+            st.rerun()
+        if st.button("Esci", use_container_width=True, key="btn_logout"):
             st.session_state.logged_user = None
             st.session_state.show_admin = False
             st.session_state.p_attivo = None
             st.session_state.m_modulo = False
             st.session_state.show_utility = False
+            st.session_state.show_admin_section = False
             st.rerun()
-        if _is_admin:
-            if st.button("⚙️ Amministrazione", use_container_width=True, key="btn_admin"):
-                st.session_state.show_admin = True
-                st.session_state.p_attivo = None
-                st.session_state.show_db_alimenti = False
-                st.session_state.show_db_integratori = False
-                st.session_state.show_db_proteine = False
-                st.session_state.show_utility = False
-                st.rerun()
         st.markdown("---")
 
     # Blocco Paziente — selezione unificata con filtro
@@ -1608,140 +1646,8 @@ with st.sidebar:
         del st.session_state._pending_rerun
         st.rerun()
 
-# --- 5b. AREA AMMINISTRAZIONE ---
-if _auth and st.session_state.get('show_admin'):
-    st.markdown("<h2 style='color:#2c3e50;font-weight:900;'>⚙️ Amministrazione utenti</h2>", unsafe_allow_html=True)
-    if st.button("🔙 Torna all'app", key="btn_back_admin"):
-        st.session_state.show_admin = False
-        st.session_state.admin_reset_user = None
-        st.rerun()
-    st.markdown("---")
-
-    if 'admin_reset_user' not in st.session_state:
-        st.session_state.admin_reset_user = None
-
-    # ── SEZIONE 1: Cambia la tua password (admin) ──
-    with st.expander("🔐 Cambia la tua password", expanded=False):
-        with st.form("admin_cambia_pwd"):
-            pwd_attuale = st.text_input("Password attuale", type="password")
-            pwd_nuova = st.text_input("Nuova password", type="password")
-            pwd_ripeti = st.text_input("Ripeti nuova password", type="password")
-            if st.form_submit_button("Aggiorna password"):
-                if not pwd_attuale or not pwd_nuova:
-                    st.error("Compila tutti i campi.")
-                elif pwd_nuova != pwd_ripeti:
-                    st.error("Le password non coincidono.")
-                elif len(pwd_nuova) < 6:
-                    st.error("La password deve essere di almeno 6 caratteri.")
-                else:
-                    ok_ver, _ = _auth.verify_login(st.session_state.logged_user, pwd_attuale)
-                    if not ok_ver:
-                        st.error("Password attuale non corretta.")
-                    else:
-                        ok, msg = _auth.change_password(st.session_state.logged_user, pwd_nuova)
-                        if ok:
-                            st.success(msg)
-                            st.rerun()
-                        else:
-                            st.error(msg)
-
-    st.markdown("---")
-
-    # ── SEZIONE 2: Lista utenti ──
-    st.markdown("#### 👥 Utenti registrati")
-    users = _auth.get_all_users()
-    if not users:
-        st.info("Nessun utente. Crea il primo dalla sezione qui sotto.")
-    else:
-        for u in users:
-            uname = u.get('username', '')
-            attivo = u.get('attivo', True)
-            is_adm = u.get('is_admin', False)
-            created = u.get('created_at', '')[:10] if u.get('created_at') else '—'
-            stato = "🟢 Attivo" if attivo else "🔴 Disattivato"
-            badge = "`admin`" if is_adm else ""
-            with st.container():
-                c1, c2, c3 = st.columns([2, 1.5, 1])
-                with c1:
-                    nome_cognome = f"{u.get('cognome', '')} {u.get('nome', '')}".strip() or uname
-                    st.markdown(f"**{nome_cognome}** {badge}")
-                    st.caption(f"@{uname} — Creato: {created}")
-                with c2:
-                    if not is_adm:
-                        label_toggle = "Disattiva" if attivo else "Attiva"
-                        if st.button(label_toggle, key=f"toggle_{uname}"):
-                            _auth.toggle_user_active(uname)
-                            st.rerun()
-                with c3:
-                    if uname != st.session_state.logged_user and not is_adm:
-                        if st.button("Reset pwd", key=f"reset_{uname}"):
-                            st.session_state.admin_reset_user = uname
-                            st.rerun()
-                st.markdown("---")
-
-    # Modal: reset password (altro utente)
-    if st.session_state.admin_reset_user:
-        st.markdown(f"##### 🔑 Imposta nuova password per **{st.session_state.admin_reset_user}**")
-        with st.form("form_reset_pwd"):
-            rp1 = st.text_input("Nuova password", type="password")
-            rp2 = st.text_input("Ripeti password", type="password")
-            rc1, rc2 = st.columns(2)
-            if rc1.form_submit_button("Salva"):
-                if rp1 and rp2 and rp1 == rp2 and len(rp1) >= 6:
-                    ok, msg = _auth.change_password(st.session_state.admin_reset_user, rp1)
-                    if ok:
-                        st.success(msg)
-                        st.session_state.admin_reset_user = None
-                        st.rerun()
-                    else:
-                        st.error(msg)
-                else:
-                    st.error("Password non valide o non coincidono.")
-            if rc2.form_submit_button("Annulla"):
-                st.session_state.admin_reset_user = None
-                st.rerun()
-
-    st.markdown("---")
-
-    # ── SEZIONE 3: Nuovo utente ──
-    st.markdown("#### ➕ Crea nuovo utente")
-    with st.form("admin_nuovo_utente"):
-        cn, cc = st.columns(2)
-        with cn:
-            nuovo_nome = st.text_input("Nome", placeholder="es. Mario")
-        with cc:
-            nuovo_cognome = st.text_input("Cognome", placeholder="es. Rossi")
-        nu = st.text_input("Username", placeholder="es. mario.rossi")
-        np = st.text_input("Password", type="password", placeholder="minimo 6 caratteri")
-        np_rip = st.text_input("Ripeti password", type="password")
-        if st.form_submit_button("Crea utente"):
-            if not nu or not np:
-                st.error("Inserisci username e password.")
-            elif np != np_rip:
-                st.error("Le password non coincidono.")
-            elif len(np) < 6:
-                st.error("La password deve essere di almeno 6 caratteri.")
-            else:
-                ok, msg = _auth.create_user(nu, np, is_admin_user=False, nome=nuovo_nome or "", cognome=nuovo_cognome or "")
-                if ok:
-                    _auth.init_user_data_folder(_auth.get_user_data_dir(nu), [
-                        ('database_pazienti.csv', COLS_PAZ),
-                        ('database_alimenti.csv', COLS_ALI),
-                        ('database_diete.csv', COLS_DIETA),
-                        ('database_integratori.csv', COLS_INTEGR),
-                        ('database_prescrizioni.csv', COLS_PRESCR),
-                        ('database_proteine.csv', COLS_PROT),
-                    ])
-                    st.success(msg)
-                else:
-                    st.error(msg)
-                st.rerun()
-
-    st.stop()
-
-
 def _render_navbar():
-    """Barra superiore stile Nutriverso: logo + breadcrumb. Mostrata solo in area principale (non login, non admin)."""
+    """Barra superiore: logo + breadcrumb. Mostrata solo in area principale (non login, non admin)."""
     p_r = st.session_state.p_attivo
     show_utility = st.session_state.get("show_utility", False)
     show_db_a = st.session_state.get("show_db_alimenti", False)
@@ -1749,7 +1655,7 @@ def _render_navbar():
     show_db_p = st.session_state.get("show_db_proteine", False)
 
     if show_utility:
-        bread = "Pazienti &gt; Utility"
+        bread = "Pazienti &gt; Utility &gt; Amministrazione" if st.session_state.get("show_admin_section") else "Pazienti &gt; Utility"
     elif show_db_a:
         bread = "Database &gt; Alimenti VLEKT"
     elif show_db_i:
@@ -1782,20 +1688,8 @@ if idx_mod is not None and (idx_mod >= len(df_p) or idx_mod not in df_p.index):
     idx_mod = None
 d_form = df_p.iloc[idx_mod] if idx_mod is not None else p_r
 
-# Navbar stile Nutriverso (logo + breadcrumb) — sopra tutto il contenuto principale
+# Navbar (logo + breadcrumb) — sopra tutto il contenuto principale
 _render_navbar()
-
-# CTA principale solo su home: "Crea paziente". Su scheda paziente "Nuova visita" resta solo nella colonna Storico visite (niente duplicato in navbar)
-_show_nav_cta = not st.session_state.get("show_utility") and not st.session_state.get("show_db_alimenti") and not st.session_state.get("show_db_integratori") and not st.session_state.get("show_db_proteine")
-if _show_nav_cta and p_r is None:
-    _nav_cta_col1, _nav_cta_col2 = st.columns([5, 1])
-    with _nav_cta_col2:
-        if st.button("Crea paziente", type="primary", key="navbar_crea_paziente", use_container_width=True):
-            st.session_state.p_attivo = None
-            st.session_state.m_modulo = True
-            st.session_state.idx_mod = None
-            st.session_state.edit_anagrafica = False
-            st.rerun()
 
 # Inizializza session state integratori se mancanti
 if 'edit_integr_idx' not in st.session_state: st.session_state.edit_integr_idx = None
@@ -1818,12 +1712,145 @@ def chiudi_db():
 # PAGINA UTILITY
 # ══════════════════════════════════════════════════════
 if st.session_state.show_utility:
-    st.markdown("<h2 style='color:#2c3e50;font-weight:900;'>🔧 Utility</h2>", unsafe_allow_html=True)
+    # ── Sottosezione Amministrazione utenti (solo admin) ──
+    if _auth and _is_admin and st.session_state.get("show_admin_section"):
+        st.markdown("<h2 style='color:#2c3e50;font-weight:900;'>⚙️ Amministrazione utenti</h2>", unsafe_allow_html=True)
+        if st.button("🔙 Torna a Utility", key="btn_back_admin"):
+            st.session_state.show_admin_section = False
+            st.session_state.admin_reset_user = None
+            st.rerun()
+        st.markdown("---")
+        if 'admin_reset_user' not in st.session_state:
+            st.session_state.admin_reset_user = None
+        with st.expander("🔐 Cambia la tua password", expanded=False):
+            with st.form("admin_cambia_pwd"):
+                pwd_attuale = st.text_input("Password attuale", type="password")
+                pwd_nuova = st.text_input("Nuova password", type="password")
+                pwd_ripeti = st.text_input("Ripeti nuova password", type="password")
+                if st.form_submit_button("Aggiorna password"):
+                    if not pwd_attuale or not pwd_nuova:
+                        st.error("Compila tutti i campi.")
+                    elif pwd_nuova != pwd_ripeti:
+                        st.error("Le password non coincidono.")
+                    elif len(pwd_nuova) < 6:
+                        st.error("La password deve essere di almeno 6 caratteri.")
+                    else:
+                        ok_ver, _ = _auth.verify_login(st.session_state.logged_user, pwd_attuale)
+                        if not ok_ver:
+                            st.error("Password attuale non corretta.")
+                        else:
+                            ok, msg = _auth.change_password(st.session_state.logged_user, pwd_nuova)
+                            if ok:
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+        st.markdown("---")
+        st.markdown("<div style='font-size:13px;font-weight:700;color:#2c3e50;margin-bottom:6px;'>👥 Utenti registrati</div>", unsafe_allow_html=True)
+        users = _auth.get_all_users()
+        if not users:
+            st.info("Nessun utente. Crea il primo dalla sezione qui sotto.")
+        else:
+            # Intestazione colonne (stessa proporzione delle righe)
+            h1, h2, h3, h4, h5 = st.columns([1.8, 1.2, 0.8, 0.6, 1.2])
+            h1.caption("👤 Nome")
+            h2.caption("📧 Username")
+            h3.caption("📅 Creato")
+            h4.caption("📊 Stato")
+            h5.caption("🔧 Azioni")
+            for u in users:
+                uname = u.get('username', '')
+                attivo = u.get('attivo', True)
+                is_adm = u.get('is_admin', False)
+                created = u.get('created_at', '')[:10] if u.get('created_at') else '—'
+                nome_cognome = f"{u.get('cognome', '')} {u.get('nome', '')}".strip() or uname
+                stato_icon = "🟢" if attivo else "🔴"
+                stato_txt = "Attivo" if attivo else "Off"
+                c1, c2, c3, c4, c5 = st.columns([1.8, 1.2, 0.8, 0.6, 1.2])
+                with c1:
+                    st.markdown(f"<div style='font-size:12px;'><strong>{nome_cognome}</strong></div>", unsafe_allow_html=True)
+                with c2:
+                    st.markdown(f"<div style='font-size:11px;color:#6b7280;'>@{uname}</div>", unsafe_allow_html=True)
+                with c3:
+                    st.markdown(f"<div style='font-size:11px;color:#64748b;'>{created}</div>", unsafe_allow_html=True)
+                with c4:
+                    if is_adm:
+                        st.markdown("<div style='font-size:10px;background:#3498db;color:#fff;padding:2px 6px;border-radius:4px;display:inline-block;'>admin</div>", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"<div style='font-size:11px;'>{stato_icon} {stato_txt}</div>", unsafe_allow_html=True)
+                with c5:
+                    if not is_adm:
+                        a1, a2 = st.columns(2)
+                        with a1:
+                            label_toggle = "🔴 Off" if attivo else "🟢 On"
+                            if st.button(label_toggle, key=f"toggle_{uname}", use_container_width=True):
+                                _auth.toggle_user_active(uname)
+                                st.rerun()
+                        with a2:
+                            if uname != st.session_state.logged_user:
+                                if st.button("🔑 Pwd", key=f"reset_{uname}", use_container_width=True):
+                                    st.session_state.admin_reset_user = uname
+                                    st.rerun()
+        if st.session_state.admin_reset_user:
+            st.markdown(f"##### 🔑 Imposta nuova password per **{st.session_state.admin_reset_user}**")
+            with st.form("form_reset_pwd"):
+                rp1 = st.text_input("Nuova password", type="password")
+                rp2 = st.text_input("Ripeti password", type="password")
+                rc1, rc2 = st.columns(2)
+                if rc1.form_submit_button("Salva"):
+                    if rp1 and rp2 and rp1 == rp2 and len(rp1) >= 6:
+                        ok, msg = _auth.change_password(st.session_state.admin_reset_user, rp1)
+                        if ok:
+                            st.success(msg)
+                            st.session_state.admin_reset_user = None
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                    else:
+                        st.error("Password non valide o non coincidono.")
+                if rc2.form_submit_button("Annulla"):
+                    st.session_state.admin_reset_user = None
+                    st.rerun()
+        st.markdown("---")
+        st.markdown("#### ➕ Crea nuovo utente")
+        with st.form("admin_nuovo_utente"):
+            cn, cc = st.columns(2)
+            with cn:
+                nuovo_nome = st.text_input("Nome", placeholder="es. Mario")
+            with cc:
+                nuovo_cognome = st.text_input("Cognome", placeholder="es. Rossi")
+            nu = st.text_input("Username", placeholder="es. mario.rossi")
+            np = st.text_input("Password", type="password", placeholder="minimo 6 caratteri")
+            np_rip = st.text_input("Ripeti password", type="password")
+            if st.form_submit_button("Crea utente"):
+                if not nu or not np:
+                    st.error("Inserisci username e password.")
+                elif np != np_rip:
+                    st.error("Le password non coincidono.")
+                elif len(np) < 6:
+                    st.error("La password deve essere di almeno 6 caratteri.")
+                else:
+                    ok, msg = _auth.create_user(nu, np, is_admin_user=False, nome=nuovo_nome or "", cognome=nuovo_cognome or "")
+                    if ok:
+                        _auth.init_user_data_folder(_auth.get_user_data_dir(nu), [
+                            ('database_pazienti.csv', COLS_PAZ),
+                            ('database_alimenti.csv', COLS_ALI),
+                            ('database_diete.csv', COLS_DIETA),
+                            ('database_integratori.csv', COLS_INTEGR),
+                            ('database_prescrizioni.csv', COLS_PRESCR),
+                            ('database_proteine.csv', COLS_PROT),
+                        ])
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+                    st.rerun()
+        st.stop()
 
+    st.markdown("<h2 style='color:#2c3e50;font-weight:900;'>🔧 Utility</h2>", unsafe_allow_html=True)
     if st.button("🔙 Chiudi Utility", use_container_width=False):
         st.session_state.show_utility = False
+        st.session_state.show_admin_section = False
         st.rerun()
-
     st.markdown("---")
 
     # Lista file database
@@ -1988,6 +2015,13 @@ if st.session_state.show_utility:
             st.rerun()
         else:
             st.success("✅ Nessun duplicato trovato.")
+
+    st.markdown("---")
+    if _auth and _is_admin:
+        st.markdown("#### ⚙️ Amministrazione")
+        if st.button("👥 Amministrazione utenti", type="primary", key="btn_admin_from_utility"):
+            st.session_state.show_admin_section = True
+            st.rerun()
 
 # ══════════════════════════════════════════════════════
 # PAGINA DB ALIMENTI
@@ -2456,7 +2490,7 @@ elif p_r is not None:
             idx_sel = st.session_state.visita_idx_sel
             rv_sel  = st_p_ord.loc[idx_sel]
 
-            # ── CARD DATI GENERALI + INFO VISITE (stile Nutriverso) ──
+            # ── CARD DATI GENERALI + INFO VISITE ──
             eta_anni, eta_mesi = calcola_eta_anni_mesi(p_r.get('Data_Nascita', '01/01/1990'))
             sesso_label = "Femmina" if str(p_r.get('Sesso', '')).strip().upper() == 'F' else "Maschio"
             ultima_visita_str, giorni_da_ultima, n_visite_tot, intervallo_medio = calcola_info_visite(st_p_ord)
@@ -2465,7 +2499,7 @@ elif p_r is not None:
             with col_dati_gen:
                 st.markdown("""
                 <div class="card" style="margin-bottom: 16px;">
-                    <h4 class="card-header-blue">Dati generali</h4>
+                    <h4 class="card-header-orange">Dati generali</h4>
                     <div class="card-text">Sesso: """ + sesso_label + """</div>
                     <div class="card-text">Età: """ + f"{eta_anni} anni e {eta_mesi} mesi" + """</div>
                 </div>""", unsafe_allow_html=True)
@@ -2667,7 +2701,7 @@ elif p_r is not None:
                     # Card "Elenco visite e appuntamenti" — 1 click per aprire: clicca sulla riga (Data|Peso|BMI)
                     _col_w = [3.5, 1.1]
                     st.markdown("<div class='card' style='margin-bottom: 16px;'><h4 class='card-header'>Elenco visite e appuntamenti</h4>", unsafe_allow_html=True)
-                    st.markdown("<div style='font-size:11px;color:#94a3b8;margin-bottom:8px;'>Clicca sulla visita per aprirla (1 click) · Usa <b>Apri diete</b> per i piani alimentari</div>", unsafe_allow_html=True)
+                    st.markdown("<div style='font-size:11px;color:#475569;margin-bottom:8px;'>Clicca sulla visita per aprirla (1 click) · Usa <b>Apri diete</b> per i piani alimentari</div>", unsafe_allow_html=True)
                     _eh1, _eh2 = st.columns(_col_w)
                     _eh1.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>Visita</span>", unsafe_allow_html=True)
                     _eh2.markdown("<span style='font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'>Apri diete</span>", unsafe_allow_html=True)
@@ -2675,11 +2709,13 @@ elif p_r is not None:
                     for _i, _rv in st_p_ord.iloc[::-1].iterrows():
                         _is_sel = (_i == idx_sel)
                         _bmi_v = to_f(_rv['BMI'])
-                        _, _bmi_c = calcola_stato_bmi(_bmi_v) if _bmi_v > 0 else ('—', '#94a3b8')
+                        _, _bmi_c = calcola_stato_bmi(_bmi_v) if _bmi_v > 0 else ('—', '#6b7280')
                         _data_vis = str(_rv['Data_Visita']).strip()
+                        _visita_norm = _norm_data_visita(_data_vis)
+                        _cf_norm = cf_attivo.strip().upper() if isinstance(cf_attivo, str) else str(cf_attivo).strip().upper()
                         _has_diete = (not df_d.empty) and (
-                            (df_d['Codice_Fiscale'].astype(str).str.strip() == cf_attivo) &
-                            (df_d['Data_Visita'].astype(str).str.strip() == _data_vis)
+                            (df_d['Codice_Fiscale'].astype(str).str.strip().str.upper() == _cf_norm) &
+                            (df_d['Data_Visita'].astype(str).apply(_norm_data_visita) == _visita_norm)
                         ).any()
                         _row_label = f"{_rv['Data_Visita']}  ·  {_rv['Peso']} kg  ·  BMI {_rv['BMI']}"
                         _c1, _c2 = st.columns(_col_w)
@@ -2961,11 +2997,20 @@ elif p_r is not None:
             labels_tab2 = [f"🗓️ {rv['Data_Visita']}  —  ⚖️ {rv['Peso']} kg" for (_, rv) in visite_tab2]
             date_tab2   = [rv['Data_Visita'] for (_, rv) in visite_tab2]
 
+            visita_idx_sel = st.session_state.get('visita_idx_sel')
+            default_visita_index = 0
+            if visita_idx_sel is not None:
+                for i, (idx, _) in enumerate(visite_tab2):
+                    if idx == visita_idx_sel:
+                        default_visita_index = i
+                        break
+            sb_key = "selectbox_tab2" if visita_idx_sel is None else f"selectbox_tab2_{visita_idx_sel}"
+
             st.markdown("<div class='card' style='margin-bottom:12px;'><h4 class='card-header-blue'>🗓️ Seleziona Visita di Riferimento</h4></div>", unsafe_allow_html=True)
             scelta_tab2 = st.selectbox(
                 "Visita:", range(len(labels_tab2)),
                 format_func=lambda x: labels_tab2[x],
-                index=0, key="selectbox_tab2", label_visibility="collapsed"
+                index=default_visita_index, key=sb_key, label_visibility="collapsed"
             )
             visita_selezionata = date_tab2[scelta_tab2]
             rv_tab2 = visite_tab2[scelta_tab2][1]
@@ -2997,6 +3042,55 @@ elif p_r is not None:
             # ── SELEZIONE PIANO (GIORNI) ──────────────────────────────────
             if 'piano_giorni' not in st.session_state: st.session_state.piano_giorni = None
             if 'piano_step' not in st.session_state: st.session_state.piano_step = None
+
+            # Se per questa visita esiste già un piano in df_d, mostralo subito (un solo step per visita)
+            cf_attivo = p_r.get('Codice_Fiscale', '')
+            piano_visita_step = None
+            piano_visita_giorni = None
+            ha_righe_visita = False
+            if cf_attivo and not df_d.empty and 'Data_Visita' in df_d.columns and 'Step' in df_d.columns and 'Giorni' in df_d.columns:
+                cf_norm = str(cf_attivo).strip().upper()
+                visita_norm = _norm_data_visita(str(visita_selezionata))
+                mask_visita = (
+                    (df_d['Codice_Fiscale'].astype(str).str.strip().str.upper() == cf_norm) &
+                    (df_d['Data_Visita'].astype(str).apply(_norm_data_visita) == visita_norm)
+                )
+                sub = df_d.loc[mask_visita, ['Step', 'Giorni']].drop_duplicates()
+                ha_righe_visita = len(sub) > 0
+                if len(sub) >= 1:
+                    raw_step = sub['Step'].iloc[0]
+                    raw_giorni = sub['Giorni'].iloc[0]
+                    try:
+                        piano_visita_step = int(float(raw_step))
+                    except (ValueError, TypeError):
+                        s = str(raw_step).strip()
+                        if '1' in s: piano_visita_step = 1
+                        elif '2' in s: piano_visita_step = 2
+                        else: piano_visita_step = None
+                    try:
+                        piano_visita_giorni = int(float(raw_giorni))
+                    except (ValueError, TypeError):
+                        s = ''.join(c for c in str(raw_giorni) if c.isdigit())
+                        piano_visita_giorni = int(s) if s else None
+                if piano_visita_step is not None and piano_visita_giorni is not None:
+                    if st.session_state.piano_giorni != piano_visita_giorni or st.session_state.piano_step != piano_visita_step:
+                        st.session_state.piano_giorni = piano_visita_giorni
+                        st.session_state.piano_step = piano_visita_step
+                        st.rerun()
+            if not ha_righe_visita:
+                # Nessun piano per questa visita: azzera solo se avevamo una selezione
+                if st.session_state.piano_giorni is not None or st.session_state.piano_step is not None:
+                    st.session_state.piano_giorni = None
+                    st.session_state.piano_step = None
+                    st.rerun()
+
+            # Banner: piano prescritto per questa visita (così lo vedi subito entrando)
+            if piano_visita_step is not None and piano_visita_giorni is not None:
+                st.markdown(f"""
+                <div style="background:linear-gradient(135deg,#2ecc71 0%,#27ae60 100%);border-radius:10px;padding:12px 16px;margin-bottom:14px;color:#fff;">
+                    <span style="font-size:14px;font-weight:700;">📋 Piano prescritto per questa visita</span>
+                    <span style="font-size:18px;font-weight:900;margin-left:10px;">Step {piano_visita_step} — {piano_visita_giorni} giorni</span>
+                </div>""", unsafe_allow_html=True)
 
             # Configurazione in base al sesso dell'anagrafica
             if sesso_paz == 'M':
@@ -3125,6 +3219,18 @@ elif p_r is not None:
 
             st.markdown("---")
 
+            # ── BARRA STEP (stile Nutribook) ───────────────────────────────
+            st.markdown("""
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-bottom:16px;">
+                <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Pianificazione dieta</div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span style="background:#2ecc71;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;">✓ 1. Visita</span>
+                    <span style="color:#cbd5e1;font-size:18px;">→</span>
+                    <span style="background:#2ecc71;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;">✓ 2. Piano</span>
+                    <span style="color:#cbd5e1;font-size:18px;">→</span>
+                    <span style="background:#3498db;color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;">3. Elaborazione dieta</span>
+                </div>
+            </div>""", unsafe_allow_html=True)
 
             # ── COMPOSIZIONE GIORNO TIPO ──────────────────────────────────
             c_add, c_res = st.columns([0.35, 0.65])
@@ -3212,8 +3318,14 @@ elif p_r is not None:
                 # ── INSERIMENTO PRODOTTO VLEKT ──
                 else:
                     if not df_a.empty:
-                        prodotti_ordinati = df_a['Alimento'].sort_values().unique()
-                        ali_sel = st.selectbox("Seleziona Prodotto", prodotti_ordinati)
+                        prodotti_ordinati = df_a['Alimento'].sort_values().unique().tolist()
+                        cerca_alimento = st.text_input("🔍 Cerca alimento", placeholder="Scrivi per filtrare i prodotti...", key="cerca_alimento_piano")
+                        if cerca_alimento and cerca_alimento.strip():
+                            search_lower = cerca_alimento.strip().lower()
+                            prodotti_ordinati = [p for p in prodotti_ordinati if search_lower in str(p).lower()]
+                        if not prodotti_ordinati:
+                            st.caption("Nessun prodotto corrisponde alla ricerca.")
+                        ali_sel = st.selectbox("Seleziona Prodotto", prodotti_ordinati, key="sel_prodotto_piano") if prodotti_ordinati else None
                         b_info = df_a[df_a['Alimento'] == ali_sel].iloc[0]
                         porzioni_box = str(b_info.get('Porzioni_Confezione', '1'))
 
@@ -3596,7 +3708,7 @@ elif p_r is not None:
                 <div style="font-size: 42px; margin-bottom: 10px;">💊</div>
                 <div style="font-size: 17px; font-weight: 800; color: #334155; margin-bottom: 6px;">Nessuna visita disponibile</div>
                 <div style="font-size: 13px; color: #64748b; margin-bottom: 12px;">Registra almeno una visita nel <b>Cruscotto Visite</b> per prescrivere integratori.</div>
-                <div style="font-size: 12px; color: #94a3b8;">Vai nel tab Cruscotto Visite e clicca <b>Nuova visita</b>.</div>
+                <div style="font-size: 12px; color: #475569;">Vai nel tab Cruscotto Visite e clicca <b>Nuova visita</b>.</div>
             </div>""", unsafe_allow_html=True)
         else:
             visita_corrente = st_p_ord.iloc[-1]['Data_Visita']
@@ -3885,16 +3997,16 @@ else:
         n_visite = len(df_p) if not df_p.empty else 0
         n_ali = len(df_a) if not df_a.empty else 0
         st.markdown(f"""
-        <div class="card" style="margin-bottom: 16px; padding: 12px 20px;">
+        <div class="card" style="margin-bottom: 16px; padding: 12px 20px; border-left: 4px solid #f5c99a;">
             <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
                 <div>
                     <span style="font-size: 18px; font-weight: 800; color: #1a2332;">Gestione Studio Nutrizionale</span>
-                    <span style="font-size: 11px; color: #94a3b8; margin-left: 8px;">VLEKT PRO</span>
+                    <span style="font-size: 11px; color: #64748b; margin-left: 8px;">VLEKT PRO</span>
                 </div>
                 <div style="display: flex; gap: 20px; font-size: 13px;">
                     <span><b style="color:#2563eb;">{n_paz}</b> <span style="color:#64748b;">pazienti</span></span>
                     <span><b style="color:#16a34a;">{n_visite}</b> <span style="color:#64748b;">visite</span></span>
-                    <span><b style="color:#64748b;">{n_ali}</b> <span style="color:#94a3b8;">alimenti in DB</span></span>
+                    <span><b style="color:#64748b;">{n_ali}</b> <span style="color:#64748b;">alimenti in DB</span></span>
                 </div>
             </div>
         </div>
@@ -3902,7 +4014,6 @@ else:
 
     if not st.session_state.show_utility:
         if not df_p.empty:
-            st.markdown("<div class='card' style='padding: 18px 20px;'>", unsafe_allow_html=True)
             display_df = df_p.drop_duplicates('Codice_Fiscale', keep='last').copy()
             if 'Data_Visita' in display_df.columns:
                 display_df['DT_sort'] = pd.to_datetime(display_df['Data_Visita'], format='%d/%m/%Y', errors='coerce')
@@ -3914,16 +4025,16 @@ else:
             # ── INTESTAZIONE ──
             h_btn, h_nome, h_data, h_peso, h_bmi = st.columns(COL_W)
             h_btn.markdown("")
-            h_nome.markdown("<span style='font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px;'>Paziente</span>", unsafe_allow_html=True)
-            h_data.markdown("<span style='font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px;'>Ultima visita</span>", unsafe_allow_html=True)
-            h_peso.markdown("<span style='font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px;'>Peso</span>", unsafe_allow_html=True)
-            h_bmi.markdown("<span style='font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.6px;'>BMI</span>", unsafe_allow_html=True)
+            h_nome.markdown("<span style='font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;'>Paziente</span>", unsafe_allow_html=True)
+            h_data.markdown("<span style='font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;'>Ultima visita</span>", unsafe_allow_html=True)
+            h_peso.markdown("<span style='font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;'>Peso</span>", unsafe_allow_html=True)
+            h_bmi.markdown("<span style='font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;'>BMI</span>", unsafe_allow_html=True)
             st.markdown("<hr style='margin:4px 0 6px 0; border-color:#e5e7eb;'>", unsafe_allow_html=True)
 
             # ── RIGHE PAZIENTI ──
             for i, row in display_df.head(15).iterrows():
                 bmi_val = to_f(row.get('BMI', 0))
-                bmi_label, bmi_color = calcola_stato_bmi(bmi_val) if bmi_val > 0 else ('—', '#9ca3af')
+                bmi_label, bmi_color = calcola_stato_bmi(bmi_val) if bmi_val > 0 else ('—', '#6b7280')
 
                 c_btn, c_nome, c_data, c_peso, c_bmi = st.columns(COL_W)
 
@@ -3945,16 +4056,16 @@ else:
                 c_nome.markdown(
                     f"<div style='line-height:1.3; padding:4px 0;'>"
                     f"<div style='font-size:14px;font-weight:700;color:#111827;'>{row.get('Cognome','')} {row.get('Nome','')}</div>"
-                    f"<div style='font-size:10px;color:#b0b8c4;margin-top:1px;'>{row.get('Codice_Fiscale','')}</div>"
+                    f"<div style='font-size:11px;color:#4b5563;margin-top:2px;font-weight:500;'>{row.get('Codice_Fiscale','')}</div>"
                     f"</div>", unsafe_allow_html=True)
 
                 c_data.markdown(
-                    f"<div style='padding:4px 0;font-size:13px;color:#6b7280;'>{row.get('Data_Visita','—')}</div>",
+                    f"<div style='padding:4px 0;font-size:13px;color:#4b5563;'>{row.get('Data_Visita','—')}</div>",
                     unsafe_allow_html=True)
 
                 c_peso.markdown(
                     f"<div style='padding:4px 0;font-size:13px;font-weight:600;color:#374151;'>"
-                    f"{row.get('Peso','—')} <span style='font-size:11px;font-weight:400;color:#9ca3af;'>kg</span></div>",
+                    f"{row.get('Peso','—')} <span style='font-size:11px;font-weight:400;color:#6b7280;'>kg</span></div>",
                     unsafe_allow_html=True)
 
                 c_bmi.markdown(
@@ -3964,7 +4075,5 @@ else:
                     f"</div>", unsafe_allow_html=True)
 
                 st.markdown("<div style='border-bottom:1px solid #f3f4f6; margin-bottom:2px;'></div>", unsafe_allow_html=True)
-
-            st.markdown("</div>", unsafe_allow_html=True)
         else:
             st.info("👈 Nessun paziente nel database. Utilizza la barra laterale per crearne uno nuovo.")
