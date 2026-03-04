@@ -10,6 +10,10 @@ APP_NAME = "VLEKT PRO"
 #   (oppure .../master/... se il branch è master)
 CHECK_UPDATE_URL = ""
 
+# Solo per PROVA: imposta una versione (es. "1.0.1") per far comparire il messaggio "Disponibile aggiornamento"
+# senza usare un URL. Utile per vedere come appare online. Lascia "" in produzione.
+DEMO_UPDATE_VERSION = "1.0.1"
+
 LISTA_PASTI_UOMO = ['Colazione', 'Spuntino Mattina', 'Pranzo', 'Merenda', 'Cena', 'Dopo Cena']
 LISTA_PASTI_DONNA = ['Colazione', 'Spuntino/Merenda', 'Pranzo', 'Cena']
 LISTA_PASTI = LISTA_PASTI_UOMO

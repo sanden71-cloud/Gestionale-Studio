@@ -33,14 +33,14 @@ except ImportError:
     st_searchbox = None
 
 from config import (
-    VERSION, APP_NAME, CHECK_UPDATE_URL,
+    VERSION, APP_NAME, CHECK_UPDATE_URL, DEMO_UPDATE_VERSION,
     LISTA_PASTI_UOMO, LISTA_PASTI_DONNA, LISTA_PASTI, ORDINE_PASTI, lista_laf,
     COLS_PAZ, COLS_ALI, COLS_DIETA, COLS_INTEGR, COLS_PRESCR, COLS_PROT,
     PDF_PIANI, PDF_NOME_CFG,
 )
 from utils import (
     to_f, calcola_eta, calcola_eta_anni_mesi, calcola_info_visite, _norm_data_visita,
-    calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, check_update_available,
+    calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, check_update_available, parse_version,
 )
 import data as data_mod
 
@@ -1702,11 +1702,20 @@ if st.session_state.show_utility:
 
     st.markdown("---")
 
-    # ── 6. CONTROLLA AGGIORNAMENTI (visibile solo se CHECK_UPDATE_URL impostato in config.py) ──
-    if CHECK_UPDATE_URL and str(CHECK_UPDATE_URL).strip():
+    # ── 6. CONTROLLA AGGIORNAMENTI (visibile se CHECK_UPDATE_URL impostato o DEMO_UPDATE_VERSION per prova) ──
+    _show_update = bool(CHECK_UPDATE_URL and str(CHECK_UPDATE_URL).strip())
+    _demo_ver = str(DEMO_UPDATE_VERSION).strip() if DEMO_UPDATE_VERSION else ""
+    if _demo_ver and parse_version(_demo_ver) > parse_version(VERSION):
+        _show_update = True
+    if _show_update:
         st.markdown("#### 🔄 Controlla aggiornamenti")
         if st.button("Controlla aggiornamenti", key="btn_check_update"):
-            status, value = check_update_available(VERSION, CHECK_UPDATE_URL)
+            if CHECK_UPDATE_URL and str(CHECK_UPDATE_URL).strip():
+                status, value = check_update_available(VERSION, CHECK_UPDATE_URL)
+            elif _demo_ver and parse_version(_demo_ver) > parse_version(VERSION):
+                status, value = "new", _demo_ver
+            else:
+                status, value = "current", None
             if status == "new":
                 st.success(f"✅ Disponibile una nuova versione: **{value}**. Controlla come scaricare l'aggiornamento (chiavetta, link, ecc.).")
             elif status == "current":
