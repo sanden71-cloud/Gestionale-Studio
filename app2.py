@@ -1469,6 +1469,13 @@ if _show_update_banner:
         icon="⚠️"
     )
 
+# Banner "Cambia password al primo accesso" (password fornita da admin o recupero)
+if _auth and st.session_state.logged_user and _auth.get_user_must_change_password(st.session_state.logged_user):
+    st.warning(
+        "**Cambia la password al primo accesso.** È stata fornita dall'amministratore o dal recupero. Vai in **Utility** e usa la sezione **Cambia la tua password** per modificarla.",
+        icon="🔐"
+    )
+
 # Inizializza session state integratori se mancanti
 if 'edit_integr_idx' not in st.session_state: st.session_state.edit_integr_idx = None
 if 'confirm_del_integr' not in st.session_state: st.session_state.confirm_del_integr = None
@@ -1614,7 +1621,7 @@ if st.session_state.show_utility:
                 rc1, rc2 = st.columns(2)
                 if rc1.form_submit_button("Salva"):
                     if rp1 and rp2 and rp1 == rp2 and len(rp1) >= 6:
-                        ok, msg = _auth.change_password(st.session_state.admin_reset_user, rp1)
+                        ok, msg = _auth.change_password(st.session_state.admin_reset_user, rp1, set_must_change_on_next_login=True)
                         if ok:
                             st.toast(msg, icon="✅")
                             st.session_state.admin_reset_user = None
@@ -1669,7 +1676,7 @@ if st.session_state.show_utility:
                     ok, msg = _auth.create_user(nu, np, is_admin_user=False, nome=nuovo_nome or "", cognome=nuovo_cognome or "", attivo=attiva_subito, email=nuovo_email or "")
                     if ok:
                         data_mod.init_user_db(_auth.get_user_data_dir(nu))
-                        _toast_msg = msg + (" L'utente è attivo e può accedere." if attiva_subito else " Attivalo dall'elenco quando vuoi abilitarlo.")
+                        _toast_msg = msg + (" L'utente è attivo e può accedere. Dovrà cambiare la password al primo accesso." if attiva_subito else " Attivalo dall'elenco quando vuoi abilitarlo.")
                         st.toast(_toast_msg, icon="✅")
                     else:
                         st.error(msg)
@@ -1681,6 +1688,35 @@ if st.session_state.show_utility:
         st.session_state.show_utility = False
         st.session_state.show_admin_section = False
         st.rerun()
+
+    # Cambia la tua password: visibile a TUTTI gli utenti (non solo admin)
+    _must_change = _auth.get_user_must_change_password(st.session_state.logged_user) if _auth else False
+    with st.expander("🔐 Cambia la tua password", expanded=_must_change):
+        with st.form("utility_cambia_pwd"):
+            pwd_attuale = st.text_input("Password attuale", type="password", autocomplete="current-password", key="util_pwd_attuale")
+            pwd_nuova = st.text_input("Nuova password", type="password", key="util_pwd_nuova")
+            pwd_ripeti = st.text_input("Ripeti nuova password", type="password", key="util_pwd_ripeti")
+            if st.form_submit_button("Aggiorna password"):
+                if not pwd_attuale or not pwd_nuova:
+                    st.error("Compila tutti i campi.")
+                elif pwd_nuova != pwd_ripeti:
+                    st.error("Le password non coincidono.")
+                elif len(pwd_nuova) < 6:
+                    st.error("La password deve essere di almeno 6 caratteri.")
+                else:
+                    ok_ver, _ = _auth.verify_login(st.session_state.logged_user, (pwd_attuale or "").strip())
+                    if not ok_ver:
+                        st.error("Password attuale non corretta.")
+                    else:
+                        ok, msg = _auth.change_password(st.session_state.logged_user, pwd_nuova, set_must_change_on_next_login=False)
+                        if ok:
+                            st.toast(msg, icon="✅")
+                            st.rerun()
+                        else:
+                            st.error(msg)
+        if _must_change:
+            st.caption("⚠️ Modifica la password per sicurezza: è stata fornita dall'amministratore o dal recupero.")
+    st.markdown("---")
 
     if "utility_tab" not in st.session_state:
         st.session_state.utility_tab = "backup"

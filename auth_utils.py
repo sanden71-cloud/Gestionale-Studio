@@ -256,6 +256,7 @@ def create_user(username: str, password: str, is_admin_user: bool = False, nome:
         "attivo": attivo,
         "is_admin": is_admin_user,
         "created_at": str(__import__("datetime").datetime.now().isoformat()),
+        "must_change_password": True,
     })
     if _save_users(data):
         return True, "Utente creato."
@@ -271,8 +272,8 @@ def init_user_data_folder(user_dir: str, files_cols):
             pd.DataFrame(columns=cols).to_csv(path, index=False)
 
 
-def change_password(username: str, new_password: str) -> tuple[bool, str]:
-    """Cambia la password di un utente."""
+def change_password(username: str, new_password: str, set_must_change_on_next_login: bool = False) -> tuple[bool, str]:
+    """Cambia la password di un utente. Se set_must_change_on_next_login=True (admin reset), l'utente dovrà cambiarla al primo accesso."""
     data = _load_users()
     username = username.strip().lower()
     if len(new_password) < 6:
@@ -280,8 +281,15 @@ def change_password(username: str, new_password: str) -> tuple[bool, str]:
     for u in data["users"]:
         if u.get("username", "").lower() == username:
             u["password_hash"] = _hash_password(new_password)
+            u["must_change_password"] = bool(set_must_change_on_next_login)
             return _save_users(data), "Password aggiornata."
     return False, "Utente non trovato."
+
+
+def get_user_must_change_password(username: str) -> bool:
+    """True se l'utente deve cambiare la password al primo accesso (fornita da admin o recupero)."""
+    u = get_user_info(username)
+    return bool(u and u.get("must_change_password"))
 
 
 def reset_admin_password_to_default() -> tuple[bool, str]:
@@ -383,6 +391,7 @@ def request_password_reset(email_or_username: str) -> tuple[bool, str, str | Non
     for u in data["users"]:
         if u.get("username", "").lower() == username.lower():
             u["password_hash"] = _hash_password(temp_pass)
+            u["must_change_password"] = True
             if not _save_users(data):
                 return False, "Errore durante il salvataggio.", None
             break
@@ -396,20 +405,20 @@ def request_password_reset(email_or_username: str) -> tuple[bool, str, str | Non
 Username: {username}
 Password temporanea: {temp_pass}
 
-Accedi con queste credenziali e cambia subito la password da Utility > Amministrazione (sezione "Cambia la tua password").
+IMPORTANTE: Cambia la password al primo accesso da Utility > Cambia la tua password (per sicurezza).
 
 Se non hai richiesto tu questo recupero, contatta l'amministratore.
 """
         sent, send_err = _send_email(email_addr, subject, body)
         if sent:
-            return True, "Controlla la tua email: ti abbiamo inviato una password temporanea. Accedi e cambiala da Utility.", None
+            return True, "Controlla la tua email: ti abbiamo inviato una password temporanea. Accedi e cambia la password al primo accesso da Utility.", None
         # Invio fallito: messaggio con motivo e password da mostrare
-        msg_base = "Password temporanea generata. Usala per accedere e cambiala da Utility."
+        msg_base = "Password temporanea generata. Usala per accedere e cambia la password al primo accesso da Utility."
         if send_err:
             msg_base = f"L'email non è stata inviata: {send_err}. " + msg_base
         return True, msg_base, temp_pass
     # Nessuna email sull'utente o invio non tentato
-    return True, "Password temporanea generata. Usala per accedere e cambiala da Utility.", temp_pass
+    return True, "Password temporanea generata. Usala per accedere e cambia la password al primo accesso da Utility.", temp_pass
 
 
 def set_user_email(username: str, email: str) -> tuple[bool, str]:
