@@ -222,11 +222,14 @@ def find_user_by_email_or_username(key: str):
     return None
 
 
-def _send_email(to: str, subject: str, body: str) -> bool:
-    """Invia email tramite SMTP. Config in auth/config.json: smtp_host, smtp_port, smtp_user, smtp_password, smtp_use_tls, from_email."""
+def _send_email(to: str, subject: str, body: str) -> tuple[bool, str]:
+    """
+    Invia email tramite SMTP. Config in auth/config.json: smtp_host, smtp_port, smtp_user, smtp_password, smtp_use_tls, from_email.
+    Ritorna (ok, messaggio_errore). Se ok=True, messaggio_errore è vuoto.
+    """
     to = (to or "").strip()
     if not to or "@" not in to:
-        return False
+        return False, "Indirizzo email non valido."
     cfg = {}
     if CONFIG_FILE.exists():
         try:
@@ -234,14 +237,14 @@ def _send_email(to: str, subject: str, body: str) -> bool:
                 cfg = json.load(f)
         except Exception:
             pass
-    host = cfg.get("smtp_host") or os.environ.get("VLEKT_SMTP_HOST")
+    host = (cfg.get("smtp_host") or os.environ.get("VLEKT_SMTP_HOST") or "").strip()
     port = int(cfg.get("smtp_port") or os.environ.get("VLEKT_SMTP_PORT") or 587)
-    user = cfg.get("smtp_user") or os.environ.get("VLEKT_SMTP_USER")
-    password = cfg.get("smtp_password") or os.environ.get("VLEKT_SMTP_PASSWORD")
+    user = (cfg.get("smtp_user") or os.environ.get("VLEKT_SMTP_USER") or "").strip()
+    password = cfg.get("smtp_password") or os.environ.get("VLEKT_SMTP_PASSWORD") or ""
     use_tls = cfg.get("smtp_use_tls", True)
-    from_addr = cfg.get("from_email") or user or "noreply@vlekt.local"
+    from_addr = (cfg.get("from_email") or user or "noreply@vlekt.local").strip()
     if not host or not user or not password:
-        return False
+        return False, "SMTP non configurato: inserisci host, utente e password in Utility > Configurazione (licenza e SMTP)."
     try:
         import smtplib
         from email.mime.text import MIMEText
@@ -256,9 +259,13 @@ def _send_email(to: str, subject: str, body: str) -> bool:
                 server.starttls()
             server.login(user, password)
             server.sendmail(from_addr, [to], msg.as_string())
-        return True
-    except Exception:
-        return False
+        return True, ""
+    except Exception as e:
+        err = str(e).strip() or type(e).__name__
+        if os.environ.get("VLEKT_DEV") == "1":
+            import traceback
+            traceback.print_exc()
+        return False, err
 
 
 def request_password_reset(email_or_username: str) -> tuple[bool, str, str | None]:
@@ -295,10 +302,16 @@ Accedi con queste credenziali e cambia subito la password da Utility > Amministr
 
 Se non hai richiesto tu questo recupero, contatta l'amministratore.
 """
-        if _send_email(email_addr, subject, body):
+        sent, send_err = _send_email(email_addr, subject, body)
+        if sent:
             return True, "Controlla la tua email: ti abbiamo inviato una password temporanea. Accedi e cambiala da Utility.", None
-    # Nessuna email o invio fallito: restituisci la password da mostrare
-    return True, f"Password temporanea generata. Usala per accedere e cambiala da Utility.", temp_pass
+        # Invio fallito: messaggio con motivo e password da mostrare
+        msg_base = "Password temporanea generata. Usala per accedere e cambiala da Utility."
+        if send_err:
+            msg_base = f"L'email non è stata inviata: {send_err}. " + msg_base
+        return True, msg_base, temp_pass
+    # Nessuna email sull'utente o invio non tentato
+    return True, "Password temporanea generata. Usala per accedere e cambiala da Utility.", temp_pass
 
 
 def set_user_email(username: str, email: str) -> tuple[bool, str]:

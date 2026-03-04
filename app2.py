@@ -1460,7 +1460,7 @@ if st.session_state.show_utility:
             st.rerun()
         st.markdown("---")
         # Configurazione licenza e SMTP (solo admin)
-        with st.expander("⚙️ Configurazione (licenza e SMTP)", expanded=False):
+        with st.expander("⚙️ Configurazione (licenza e SMTP)", expanded=True):
             _cfg = _auth.get_config()
             with st.form("admin_config_form"):
                 st.markdown("**Licenza**")
@@ -1964,7 +1964,8 @@ if st.session_state.show_utility:
     # ── 8. AMMINISTRAZIONE ──
     if _tab == "amministrazione" and _auth and _is_admin:
         st.markdown("#### ⚙️ Amministrazione")
-        if st.button("👥 Amministrazione utenti", type="primary", key="btn_admin_from_utility"):
+        st.caption("Configura **licenza** e **server SMTP** (per il recupero password via email) e gestisci gli utenti.")
+        if st.button("👥 Amministrazione utenti (licenza, SMTP, utenti)", type="primary", key="btn_admin_from_utility"):
             st.session_state.show_admin_section = True
             st.rerun()
 
