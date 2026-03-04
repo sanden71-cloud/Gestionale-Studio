@@ -1,6 +1,7 @@
 # Dati sensibili - non committare (locale senza sync)
 auth/users.json
 auth/config.json
+auth/licenses.json
 # I file auth/users.enc e auth/config.enc (cifrati con VLEKT_SECRET_KEY) si possono committare per sync locale ↔ deploy.
 
 # Dati utenti (opzionale: se vuoi tenere i dati fuori dal repo)

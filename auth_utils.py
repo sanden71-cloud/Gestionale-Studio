@@ -18,8 +18,9 @@ APP_DIR = Path(__file__).resolve().parent
 AUTH_DIR = APP_DIR / "auth"
 DATA_DIR = APP_DIR / "data"
 CONFIG_FILE = AUTH_DIR / "config.json"
-USERS_ENC = AUTH_DIR / "users.enc"
 CONFIG_ENC = AUTH_DIR / "config.enc"
+USERS_ENC = AUTH_DIR / "users.enc"
+LICENSES_FILE = AUTH_DIR / "licenses.json"
 
 # Chiave per sincronizzazione sicura locale ↔ deploy (crittografia utenti e config)
 SECRET_KEY_ENV = "VLEKT_SECRET_KEY"
@@ -463,26 +464,154 @@ def ensure_admin_exists():
         get_user_data_dir("admin")
 
 
+def _license_signing_secret() -> bytes:
+    """Segreto per firma HMAC delle licenze (derivato da VLEKT_SECRET_KEY o valore di default)."""
+    key_str = (os.environ.get(SECRET_KEY_ENV) or "").strip()
+    if key_str:
+        return hashlib.sha256(f"vlekt_license_v1_{key_str}".encode()).digest()
+    return hashlib.sha256(b"vlekt_license_default_secret").digest()
+
+
+def _load_licenses() -> dict:
+    """Carica auth/licenses.json."""
+    _ensure_dirs()
+    if not LICENSES_FILE.exists():
+        return {"licenses": []}
+    try:
+        with open(LICENSES_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {"licenses": []}
+
+
+def _save_licenses(data: dict) -> bool:
+    """Salva auth/licenses.json."""
+    _ensure_dirs()
+    try:
+        with open(LICENSES_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+
+def generate_license(expires_at: str | None = None, notes: str = "") -> str:
+    """
+    Genera una chiave licenza univoca. Se expires_at=None, licenza senza scadenza.
+    expires_at formato YYYY-MM-DD. Salva nel database licenze. Ritorna la chiave da dare all'utente.
+    """
+    import uuid
+    from datetime import datetime
+    lid = str(uuid.uuid4())
+    exp = "NONE"
+    exp_date_str = None
+    if expires_at and (expires_at or "").strip():
+        s = (expires_at or "").strip()
+        if len(s) == 10:
+            try:
+                datetime.strptime(s, "%Y-%m-%d")
+                exp = s.replace("-", "")  # YYYYMMDD
+                exp_date_str = s
+            except ValueError:
+                pass
+    payload = f"{lid}|{exp}"
+    sig = hashlib.pbkdf2_hmac("sha256", payload.encode(), _license_signing_secret(), 10000)[:12]
+    key = f"VLEKT-{lid}-{exp}-{base64.urlsafe_b64encode(sig).decode().rstrip('=')}"
+    data = _load_licenses()
+    data.setdefault("licenses", []).append({
+        "key": key,
+        "expires_at": exp_date_str,
+        "created_at": str(datetime.now().isoformat()),
+        "notes": (notes or "").strip(),
+    })
+    _save_licenses(data)
+    return key
+
+
+def validate_license(key: str) -> tuple[bool, str | None, str]:
+    """
+    Valida una chiave licenza. Ritorna (ok, expires_at, msg).
+    ok=True: licenza valida; expires_at è la data scadenza (YYYY-MM-DD) o None se perpetua; msg descrizione per utente.
+    ok=False: msg descrive l'errore.
+    """
+    from datetime import datetime
+    key = (key or "").strip()
+    if not key or len(key) < 20:
+        return False, None, "Chiave licenza non valida."
+    # Formato nuovo: VLEKT-uuid-expires-sig
+    if key.startswith("VLEKT-"):
+        parts = key.split("-")
+        if len(parts) != 4:
+            return False, None, "Formato licenza non valido."
+        lid, exp, sig_b64 = parts[1], parts[2], parts[3]
+        sig_b64_pad = sig_b64 + "=" * (4 - len(sig_b64) % 4) if len(sig_b64) % 4 else sig_b64
+        try:
+            sig = base64.urlsafe_b64decode(sig_b64_pad)
+        except Exception:
+            return False, None, "Chiave licenza non valida."
+        payload = f"{lid}|{exp}"
+        expected = hashlib.pbkdf2_hmac("sha256", payload.encode(), _license_signing_secret(), 10000)[:12]
+        if sig != expected:
+            return False, None, "Chiave licenza non valida."
+        if exp == "NONE":
+            return True, None, "Licenza senza scadenza."
+        if len(exp) != 8:
+            return False, None, "Formato scadenza non valido."
+        exp_date = f"{exp[:4]}-{exp[4:6]}-{exp[6:8]}"
+        try:
+            exp_dt = datetime.strptime(exp_date, "%Y-%m-%d")
+        except ValueError:
+            return False, None, "Data scadenza non valida."
+        if datetime.now().date() > exp_dt.date():
+            return False, None, f"Licenza scaduta il {exp_date}."
+        return True, exp_date, f"Licenza valida fino al {exp_date}."
+    # Legacy: chiave semplice (>= 8 caratteri)
+    if len(key) >= 8:
+        return True, None, "Licenza valida (formato precedente)."
+    return False, None, "Chiave licenza non valida."
+
+
+def get_license_info() -> tuple[bool, str | None, str]:
+    """
+    Info sulla licenza attuale (da config o env). Ritorna (ok, expires_at, msg).
+    Per mostrare all'utente: "Licenza scade il 31/12/2025" o "Licenza senza scadenza".
+    """
+    key = (os.environ.get(LICENSE_ENV) or "").strip()
+    if not key:
+        cfg = get_config()
+        key = (cfg.get("license_key") or "").strip()
+    if not key:
+        return False, None, ""
+    ok, expires_at, msg = validate_license(key)
+    return ok, expires_at, msg
+
+
+def get_all_licenses() -> list:
+    """Restituisce tutte le licenze generate (per area admin)."""
+    data = _load_licenses()
+    return data.get("licenses", [])
+
+
 def check_license() -> tuple[bool, str]:
     """
     Verifica la licenza/protezione copie.
     Ritorna (ok, msg). Se ok=False, l'app non dovrebbe funzionare.
     """
-    # Controllo 1: variabile d'ambiente
-    key = os.environ.get(LICENSE_ENV)
-    if key and len(key) >= 8:
-        return True, ""
-
-    # Controllo 2: config (da config.enc se sync attivo, altrimenti config.json)
-    cfg = get_config()
-    if cfg.get("license_key") and len(str(cfg.get("license_key", ""))) >= 8:
-        return True, ""
-
-    # Controllo 3: VLEKT_DEV=1 = sviluppo locale, salta controllo
+    # Controllo 1: VLEKT_DEV=1 = sviluppo locale, salta controllo
     if os.environ.get("VLEKT_DEV") == "1":
         return True, ""
 
-    # Se non c'è licenza valida
+    # Controllo 2: chiave licenza (da env o config)
+    key = (os.environ.get(LICENSE_ENV) or "").strip()
+    if not key:
+        cfg = get_config()
+        key = (cfg.get("license_key") or "").strip()
+    if key:
+        ok, _, msg = validate_license(key)
+        if ok:
+            return True, ""
+        return False, msg or "Software non autorizzato. Contatta LINEADICIOTTO per la licenza."
+
     return False, "Software non autorizzato. Contatta LINEADICIOTTO per la licenza."
 
 

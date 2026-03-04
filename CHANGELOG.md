@@ -4,6 +4,17 @@ Questo file elenca le novità e i bug risolti per ogni versione. L'app mostra le
 
 ---
 
+## 1.1.0
+
+- **Gestione licenze**: l'amministratore può creare chiavi licenza univoche con scadenza opzionale (Utility → Amministrazione utenti → Gestione licenze). L'utente inserisce la chiave in Configurazione e vede in sidebar "Licenza scade il …" o "Licenza senza scadenza". Avviso quando la licenza scade entro 30 giorni.
+- **Cambio password al primo accesso**: se la password è fornita dall'amministratore o dal recupero, l'utente deve cambiarla al primo accesso. Banner cliccabile che porta alla sezione Cambia password in Utility (visibile a tutti gli utenti).
+- **Nome mittente email**: configurabile un nome di fantasia (es. "Software Gestionale AD") al posto dell'indirizzo email nelle email di recupero password.
+- **Sync locale ↔ deploy**: con VLEKT_SECRET_KEY, utenti e config sono salvati cifrati (users.enc, config.enc) e si possono committare su Git per sincronizzare locale e deploy.
+- **Aggiornamenti (solo online)**: l'utente conferma di aver letto le novità in Utility → Aggiornamenti (nessun download). L'avviso in home scompare dopo la conferma.
+- **Sidebar utenti**: per gli utenti non admin viene mostrata "Licenza concessa al Dott. Nome Cognome" con eventuale data di scadenza invece del ruolo.
+
+---
+
 ## 1.0.0
 
 - **Database SQLite**: i dati ora sono salvati in SQLite (un file `vlekt.db` per utente) invece che in CSV. Più veloce, più sicuro e con backup/ripristino semplificato.

@@ -1256,7 +1256,14 @@ with st.sidebar:
             _cognome = (_u.get("cognome") or "").strip()
             _nome_completo = f"{_nome} {_cognome}".strip() or st.session_state.logged_user
             st.markdown("**Licenza**")
-            st.caption(f"Licenza concessa al Dott. **{_nome_completo}**")
+            _lic_ok, _lic_exp, _lic_msg = _auth.get_license_info()
+            if _lic_ok:
+                if _lic_exp:
+                    st.caption(f"Licenza concessa al Dott. **{_nome_completo}** — Scade il **{_lic_exp}**")
+                else:
+                    st.caption(f"Licenza concessa al Dott. **{_nome_completo}** — Senza scadenza")
+            else:
+                st.caption(f"Licenza concessa al Dott. **{_nome_completo}**")
         if st.button("🏠 Home", use_container_width=True, key="btn_home"):
             st.session_state.p_attivo = None
             st.session_state.m_modulo = False
@@ -1469,6 +1476,18 @@ if _show_update_banner:
         icon="⚠️"
     )
 
+# Banner licenza in scadenza (entro 30 giorni)
+if _auth and st.session_state.logged_user:
+    _lic_ok, _lic_exp, _ = _auth.get_license_info()
+    if _lic_ok and _lic_exp:
+        from datetime import datetime, timedelta
+        try:
+            _exp_dt = datetime.strptime(_lic_exp, "%Y-%m-%d").date()
+            if 0 <= (_exp_dt - datetime.now().date()).days <= 30:
+                st.warning(f"La licenza scade il **{_lic_exp}**. Contatta l'amministratore per il rinnovo.", icon="⚠️")
+        except Exception:
+            pass
+
 # Banner "Cambia password al primo accesso" (password fornita da admin o recupero)
 if _auth and st.session_state.logged_user and _auth.get_user_must_change_password(st.session_state.logged_user):
     _c_pwd, _c_btn = st.columns([3, 1])
@@ -1518,7 +1537,7 @@ if st.session_state.show_utility:
             _cfg = _auth.get_config()
             with st.form("admin_config_form"):
                 st.markdown("**Licenza**")
-                lic = st.text_input("Chiave licenza", value=_cfg.get("license_key") or "", type="password", placeholder="Chiave da config o variabile VLEKT_LICENSE_KEY")
+                lic = st.text_input("Chiave licenza", value=_cfg.get("license_key") or "", type="password", placeholder="VLEKT-xxx-xxx o chiave legacy (genera da Gestione licenze)")
                 st.markdown("**SMTP (recupero password)**")
                 smtp_host = st.text_input("Host SMTP", value=_cfg.get("smtp_host") or "smtp.gmail.com", placeholder="es. smtp.gmail.com")
                 smtp_port = st.number_input("Porta SMTP", min_value=1, max_value=65535, value=int(_cfg.get("smtp_port") or 587), step=1)
@@ -1548,6 +1567,39 @@ if st.session_state.show_utility:
                         st.rerun()
                     else:
                         st.error(msg_cfg)
+        # Gestione licenze: crea chiavi univoche con scadenza opzionale
+        with st.expander("📜 Gestione licenze", expanded=False):
+            st.caption("Genera chiavi licenza da fornire agli utenti. L'utente inserisce la chiave in Utility → Configurazione (Chiave licenza).")
+            with st.form("admin_crea_licenza"):
+                licenza_perpetua = st.checkbox("Licenza senza scadenza", value=False, key="lic_perpetua")
+                licenza_scadenza = st.date_input("Scadenza (ignorata se selezionata 'Licenza senza scadenza')", key="lic_exp_date")
+                licenza_note = st.text_input("Note (opzionale)", placeholder="es. Dott. Rossi", key="lic_notes")
+                if st.form_submit_button("🔑 Genera nuova licenza"):
+                    exp_str = None if licenza_perpetua else licenza_scadenza.strftime("%Y-%m-%d")
+                    try:
+                        new_key = _auth.generate_license(expires_at=exp_str, notes=licenza_note)
+                        st.session_state.last_generated_license = new_key
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Errore: {e}")
+            if st.session_state.get("last_generated_license"):
+                st.success("Licenza generata. Copia la chiave e forniscila all'utente:")
+                st.code(st.session_state.last_generated_license, language=None)
+                st.caption("L'utente deve inserirla in Utility → Amministrazione utenti → Configurazione → Chiave licenza")
+                if st.button("Chiudi", key="btn_close_lic"):
+                    st.session_state.last_generated_license = None
+                    st.rerun()
+            st.markdown("---")
+            st.markdown("**Licenze generate**")
+            _all_lic = _auth.get_all_licenses()
+            if not _all_lic:
+                st.caption("Nessuna licenza ancora generata.")
+            else:
+                for _l in reversed(_all_lic[-20:]):
+                    _k = _l.get("key", "")[:40] + "..." if len(_l.get("key", "")) > 40 else _l.get("key", "")
+                    _e = _l.get("expires_at") or "Senza scadenza"
+                    _n = _l.get("notes") or ""
+                    st.caption(f"• {_e} — {_n or _k}")
         if 'admin_reset_user' not in st.session_state:
             st.session_state.admin_reset_user = None
         if 'set_email_user' not in st.session_state:
