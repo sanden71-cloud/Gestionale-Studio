@@ -329,22 +329,8 @@ st.markdown("""
 # --- AUTENTICAZIONE E LICENZA ---
 try:
     import auth_utils as _auth
-except ImportError as _e:
+except ImportError:
     _auth = None
-    _import_err = str(_e)
-else:
-    _import_err = None
-
-# DEBUG VERIFICA STREAMLIT (da rimuovere dopo il controllo)
-_debug_dir = os.path.dirname(os.path.abspath(__file__))
-_debug_files = sorted(os.listdir(_debug_dir)) if os.path.isdir(_debug_dir) else []
-with st.expander("🔍 Verifica ambiente (cancellare dopo)", expanded=True):
-    st.write("**auth_utils:**", "✅ caricato" if _auth else "❌ mancante / errore")
-    if _import_err:
-        st.code(_import_err, language="text")
-    st.write("**Cartella app:**", _debug_dir)
-    st.write("**File presenti:**", ", ".join(_debug_files) if _debug_files else "(nessuno)")
-# FINE DEBUG
 
 if _auth is None:
     st.error("L'app richiede il modulo di autenticazione (auth_utils). Verifica che il file auth_utils.py sia presente nella cartella dell'app.")
