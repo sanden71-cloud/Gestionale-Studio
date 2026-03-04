@@ -41,8 +41,13 @@ from config import (
 )
 from vlekt_utils import (
     to_f, calcola_eta, calcola_eta_anni_mesi, calcola_info_visite, _norm_data_visita,
-    calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, parse_version, read_update_info, read_changelog_for_version,
+    calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, parse_version, read_update_info,
 )
+try:
+    from vlekt_utils import read_changelog_for_version
+except ImportError:
+    def read_changelog_for_version(app_dir, version):
+        return ""
 import data as data_mod
 
 # --- 1. CONFIGURAZIONE E SETUP ---
