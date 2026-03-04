@@ -332,6 +332,10 @@ try:
 except ImportError:
     _auth = None
 
+if _auth is None:
+    st.error("L'app richiede il modulo di autenticazione (auth_utils). Verifica che il file auth_utils.py sia presente nella cartella dell'app.")
+    st.stop()
+
 if _auth:
     ok_lic, msg_lic = _auth.check_license()
     if not ok_lic:
@@ -351,6 +355,7 @@ if _auth:
 
     if st.session_state.logged_user is None:
         st.markdown("### 🔐 Accesso")
+        st.info("Solo gli utenti **attivati dall'amministratore** possono accedere. Se il tuo account non è ancora attivo, contatta l'amministratore.")
         with st.form("login_form"):
             u = st.text_input("Utente", placeholder="username")
             p = st.text_input("Password", type="password", placeholder="password")
@@ -365,15 +370,12 @@ if _auth:
                         st.error(err)
                 else:
                     st.warning("Inserisci utente e password.")
-        st.caption("Primo accesso: utente **admin** / password **Admin123!** — cambiala subito.")
+        st.caption("Primo accesso amministratore: utente **admin** / password **Admin123!** — cambiala subito da Utility.")
         st.stop()
 
     _logged = st.session_state.logged_user
     _user_dir = _auth.get_user_data_dir(_logged)
     _is_admin = _auth.is_admin(_logged)
-else:
-    _user_dir = os.path.dirname(os.path.abspath(__file__))
-    _is_admin = False
 
 # --- 2. DATABASE (path + migrazione + caricamento) ---
 paths = data_mod.get_db_paths(_user_dir)
