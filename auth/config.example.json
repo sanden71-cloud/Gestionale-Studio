@@ -1,4 +1,12 @@
 {
   "license_key": "LA_TUA_CHIAVE_LICENZA_QUI",
-  "comment": "Rinomina questo file in config.json e inserisci la chiave. Oppure usa la variabile d'ambiente VLEKT_LICENSE_KEY."
+  "comment_license": "Rinomina questo file in config.json. Oppure usa VLEKT_LICENSE_KEY come variabile d'ambiente.",
+
+  "smtp_host": "smtp.gmail.com",
+  "smtp_port": 587,
+  "smtp_user": "tua_email@gmail.com",
+  "smtp_password": "LA_TUA_PASSWORD_APP_16_CARATTERI",
+  "smtp_use_tls": true,
+  "from_email": "tua_email@gmail.com",
+  "comment_smtp": "Servono per il recupero password via email. Se non li imposti, la password temporanea viene mostrata a schermo."
 }

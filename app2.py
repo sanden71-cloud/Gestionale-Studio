@@ -41,7 +41,7 @@ from config import (
 )
 from vlekt_utils import (
     to_f, calcola_eta, calcola_eta_anni_mesi, calcola_info_visite, _norm_data_visita,
-    calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, parse_version, read_update_info,
+    calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, parse_version, read_update_info, read_changelog_for_version,
 )
 import data as data_mod
 
@@ -348,11 +348,6 @@ if _auth:
     if 'show_admin' not in st.session_state:
         st.session_state.show_admin = False
 
-    # Sviluppo locale: auto-login admin (VLEKT_DEV=1) — anche dopo refresh pagina
-    if st.session_state.logged_user is None and os.environ.get("VLEKT_DEV") == "1":
-        st.session_state.logged_user = "admin"
-        st.session_state.show_admin = False
-
     if st.session_state.logged_user is None:
         st.markdown("### 🔐 Accesso")
         st.info("Solo gli utenti **attivati dall'amministratore** possono accedere. Se il tuo account non è ancora attivo, contatta l'amministratore.")
@@ -368,29 +363,55 @@ if _auth:
                         st.rerun()
                     else:
                         st.error(err)
+                        # Se password errata per admin: in locale con VLEKT_DEV=1 mostra pulsante reset sotto il form
+                        if u and str(u).strip().lower() == "admin" and err == "Password non corretta.":
+                            if os.environ.get("VLEKT_DEV") == "1":
+                                st.session_state.show_reset_admin_btn = True
+                            else:
+                                st.caption("Se sei in locale e non ricordi la password: avvia l'app con **VLEKT_DEV=1** (es. `VLEKT_DEV=1 streamlit run app2.py`) e qui comparirà un pulsante per reimpostare la password admin.")
+                        else:
+                            st.session_state.show_reset_admin_btn = False
                 else:
                     st.warning("Inserisci utente e password.")
+        # Pulsante reimposta password admin (solo sviluppo): fuori dal form perché st.button non è ammesso in st.form
+        if st.session_state.get("show_reset_admin_btn") and os.environ.get("VLEKT_DEV") == "1":
+            if st.button("Reimposta password admin a Admin123! (solo sviluppo)", type="secondary", key="btn_reset_admin_pwd"):
+                ok_reset, msg_reset = _auth.reset_admin_password_to_default()
+                if ok_reset:
+                    st.success(msg_reset)
+                    st.session_state.show_reset_admin_btn = False
+                    st.rerun()
+                else:
+                    st.error(msg_reset)
         st.caption("Primo accesso amministratore: utente **admin** / password **Admin123!** — cambiala subito da Utility.")
+        with st.expander("🔑 Password dimenticata? Recupera con email"):
+            st.caption("Inserisci l’**email** o lo **username** del tuo account. Se l’email è registrata riceverai una password temporanea; altrimenti la vedrai qui (chiedi all’amministratore di inserire la tua email nel tuo account).")
+            with st.form("form_recupera_pwd"):
+                _recupera_key = st.text_input("Email o username", placeholder="es. mario@email.it oppure mario.rossi", key="recupera_email_username")
+                if st.form_submit_button("Invia recupero password"):
+                    if _recupera_key and _recupera_key.strip():
+                        ok_rec, msg_rec, temp_pwd = _auth.request_password_reset(_recupera_key.strip())
+                        if ok_rec:
+                            st.success(msg_rec)
+                            if temp_pwd:
+                                st.warning(f"**Password temporanea:** `{temp_pwd}` — usala per accedere, poi cambiala da Utility.")
+                            st.rerun()
+                        else:
+                            st.error(msg_rec)
+                    else:
+                        st.warning("Inserisci email o username.")
         st.stop()
 
     _logged = st.session_state.logged_user
     _user_dir = _auth.get_user_data_dir(_logged)
     _is_admin = _auth.is_admin(_logged)
 
-# --- 2. DATABASE (path + migrazione + caricamento) ---
-paths = data_mod.get_db_paths(_user_dir)
-DB_PAZIENTI = paths["DB_PAZIENTI"]
-DB_ALIMENTI = paths["DB_ALIMENTI"]
-DB_DIETE = paths["DB_DIETE"]
-DB_INTEGRATORI = paths["DB_INTEGRATORI"]
-DB_PRESCRIZIONI = paths["DB_PRESCRIZIONI"]
-DB_PROTEINE = paths["DB_PROTEINE"]
-
-# Migrazione: se admin e data/admin vuoto ma esistono CSV nella root app, copiali
+# --- 2. DATABASE (SQLite: un file vlekt.db per utente) ---
+_paths_pre = data_mod.get_db_paths(_user_dir)
+# Migrazione: se admin e cartella utente senza DB ma esistono CSV nella root app, copiali così load_all li importa
 if _auth and _is_admin and _user_dir != os.path.dirname(os.path.abspath(__file__)):
     _app_dir = os.path.dirname(os.path.abspath(__file__))
-    _root_csv = os.path.join(_app_dir, 'database_pazienti.csv')
-    if os.path.exists(_root_csv) and not os.path.exists(DB_PAZIENTI):
+    if not os.path.exists(_paths_pre["DB_SQLITE"]):
         import shutil
         for _fn in ['database_pazienti.csv', 'database_alimenti.csv', 'database_diete.csv',
                     'database_integratori.csv', 'database_prescrizioni.csv', 'database_proteine.csv']:
@@ -399,7 +420,13 @@ if _auth and _is_admin and _user_dir != os.path.dirname(os.path.abspath(__file__
             if os.path.exists(_src):
                 shutil.copy2(_src, _dst)
 
-df_p, df_a, df_d, df_i, df_pr, df_prot, _ = data_mod.load_all_databases(_user_dir)
+df_p, df_a, df_d, df_i, df_pr, df_prot, paths = data_mod.load_all_databases(_user_dir)
+DB_PAZIENTI = paths["DB_PAZIENTI"]
+DB_ALIMENTI = paths["DB_ALIMENTI"]
+DB_DIETE = paths["DB_DIETE"]
+DB_INTEGRATORI = paths["DB_INTEGRATORI"]
+DB_PRESCRIZIONI = paths["DB_PRESCRIZIONI"]
+DB_PROTEINE = paths["DB_PROTEINE"]
 
 
 # --- 3. FUNZIONI PDF (restano in app2; usano config e vlekt_utils) ---
@@ -1204,9 +1231,17 @@ if 'show_admin_section' not in st.session_state: st.session_state.show_admin_sec
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
-    # Blocco Utente
+    # Blocco Utente e ruolo (radio: Amministratore / Utente)
     if _auth:
-        st.caption(f"👤 {st.session_state.logged_user}")
+        st.radio(
+            "Ruolo",
+            options=["Amministratore", "Utente"],
+            index=0 if _is_admin else 1,
+            key="sidebar_ruolo",
+            disabled=True,
+            horizontal=True,
+        )
+        st.caption(f"Accesso come **{st.session_state.logged_user}**")
         if st.button("🏠 Home", use_container_width=True, key="btn_home"):
             st.session_state.p_attivo = None
             st.session_state.m_modulo = False
@@ -1282,6 +1317,7 @@ with st.sidebar:
         st.session_state.m_modulo = True
         st.session_state.idx_mod = None
         st.session_state.edit_anagrafica = False
+        st.session_state.show_utility = False
         st.session_state.show_db_alimenti = False
         st.session_state.show_db_integratori = False
         st.session_state.show_db_proteine = False
@@ -1378,10 +1414,11 @@ d_form = df_p.iloc[idx_mod] if idx_mod is not None else p_r
 # Navbar (logo + breadcrumb) — sopra tutto il contenuto principale
 _render_navbar()
 
-# Banner aggiornamento in apertura: se è disponibile una versione più nuova, lo mostriamo subito
+# Banner aggiornamento: solo per utenti NON admin (l'admin è chi pubblica, non deve vedere l'avviso)
 _app_dir = os.path.dirname(os.path.abspath(__file__))
 _banner_ver, _banner_url = read_update_info(_app_dir, VERSION)
-if parse_version(_banner_ver) > parse_version(VERSION):
+_show_update_banner = (not (_auth and _is_admin)) and parse_version(_banner_ver) > parse_version(VERSION)
+if _show_update_banner:
     _msg = f"**È disponibile un aggiornamento (versione {_banner_ver}).** "
     if _banner_url:
         _msg += f"Scaricalo qui: [Scarica aggiornamento]({_banner_url})"
@@ -1418,11 +1455,46 @@ if st.session_state.show_utility:
             st.session_state.admin_reset_user = None
             st.rerun()
         st.markdown("---")
+        # Configurazione licenza e SMTP (solo admin)
+        with st.expander("⚙️ Configurazione (licenza e SMTP)", expanded=False):
+            _cfg = _auth.get_config()
+            with st.form("admin_config_form"):
+                st.markdown("**Licenza**")
+                lic = st.text_input("Chiave licenza", value=_cfg.get("license_key") or "", type="password", placeholder="Chiave da config o variabile VLEKT_LICENSE_KEY")
+                st.markdown("**SMTP (recupero password)**")
+                smtp_host = st.text_input("Host SMTP", value=_cfg.get("smtp_host") or "smtp.gmail.com", placeholder="es. smtp.gmail.com")
+                smtp_port = st.number_input("Porta SMTP", min_value=1, max_value=65535, value=int(_cfg.get("smtp_port") or 587), step=1)
+                smtp_user = st.text_input("Utente SMTP", value=_cfg.get("smtp_user") or "", placeholder="email o username")
+                smtp_password = st.text_input("Password SMTP", value="", type="password", placeholder="•••••••• (lascia vuoto per non modificare)")
+                smtp_use_tls = st.checkbox("Usa TLS", value=bool(_cfg.get("smtp_use_tls", True)))
+                from_email = st.text_input("Indirizzo mittente (From)", value=_cfg.get("from_email") or "", placeholder="es. noreply@tuodominio.it")
+                if st.form_submit_button("Salva configurazione"):
+                    # Mantieni password esistente se lasciata vuota
+                    pwd_final = _cfg.get("smtp_password") or ""
+                    if (smtp_password or "").strip():
+                        pwd_final = smtp_password
+                    data = {
+                        "license_key": (lic or "").strip(),
+                        "smtp_host": (smtp_host or "").strip(),
+                        "smtp_port": smtp_port,
+                        "smtp_user": (smtp_user or "").strip(),
+                        "smtp_password": pwd_final,
+                        "smtp_use_tls": smtp_use_tls,
+                        "from_email": (from_email or "").strip(),
+                    }
+                    ok_cfg, msg_cfg = _auth.save_config(data)
+                    if ok_cfg:
+                        st.toast(msg_cfg, icon="✅")
+                        st.rerun()
+                    else:
+                        st.error(msg_cfg)
         if 'admin_reset_user' not in st.session_state:
             st.session_state.admin_reset_user = None
+        if 'set_email_user' not in st.session_state:
+            st.session_state.set_email_user = None
         with st.expander("🔐 Cambia la tua password", expanded=False):
             with st.form("admin_cambia_pwd"):
-                pwd_attuale = st.text_input("Password attuale", type="password")
+                pwd_attuale = st.text_input("Password attuale", type="password", autocomplete="current-password")
                 pwd_nuova = st.text_input("Nuova password", type="password")
                 pwd_ripeti = st.text_input("Ripeti nuova password", type="password")
                 if st.form_submit_button("Aggiorna password"):
@@ -1433,62 +1505,62 @@ if st.session_state.show_utility:
                     elif len(pwd_nuova) < 6:
                         st.error("La password deve essere di almeno 6 caratteri.")
                     else:
-                        ok_ver, _ = _auth.verify_login(st.session_state.logged_user, pwd_attuale)
+                        ok_ver, _ = _auth.verify_login(st.session_state.logged_user, (pwd_attuale or "").strip())
                         if not ok_ver:
                             st.error("Password attuale non corretta.")
                         else:
                             ok, msg = _auth.change_password(st.session_state.logged_user, pwd_nuova)
                             if ok:
-                                st.success(msg)
+                                st.toast(msg, icon="✅")
                                 st.rerun()
                             else:
                                 st.error(msg)
         st.markdown("---")
-        st.markdown("<div style='font-size:13px;font-weight:700;color:#2c3e50;margin-bottom:6px;'>👥 Utenti registrati</div>", unsafe_allow_html=True)
+        st.markdown("#### 👥 Utenti registrati")
+        st.caption("Attiva/disattiva accesso, reimposta password, imposta email (recupero password).")
         users = _auth.get_all_users()
         if not users:
-            st.info("Nessun utente. Crea il primo dalla sezione qui sotto.")
+            st.info("Nessun utente. Crea il primo dalla sezione **Crea nuovo utente** qui sotto.")
         else:
-            # Intestazione colonne (stessa proporzione delle righe)
-            h1, h2, h3, h4, h5 = st.columns([1.8, 1.2, 0.8, 0.6, 1.2])
-            h1.caption("👤 Nome")
-            h2.caption("📧 Username")
-            h3.caption("📅 Creato")
-            h4.caption("📊 Stato")
-            h5.caption("🔧 Azioni")
+            _hh = st.columns([2, 1.2, 2, 0.7, 0.7, 1.8])
+            _hh[0].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Nome</div>", unsafe_allow_html=True)
+            _hh[1].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Username</div>", unsafe_allow_html=True)
+            _hh[2].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Email</div>", unsafe_allow_html=True)
+            _hh[3].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Data</div>", unsafe_allow_html=True)
+            _hh[4].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Stato</div>", unsafe_allow_html=True)
+            _hh[5].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Azioni</div>", unsafe_allow_html=True)
             for u in users:
                 uname = u.get('username', '')
                 attivo = u.get('attivo', True)
                 is_adm = u.get('is_admin', False)
-                created = u.get('created_at', '')[:10] if u.get('created_at') else '—'
+                user_email = (u.get('email') or '').strip() or '—'
+                created = (u.get('created_at') or '')[:10]
                 nome_cognome = f"{u.get('cognome', '')} {u.get('nome', '')}".strip() or uname
-                stato_icon = "🟢" if attivo else "🔴"
-                stato_txt = "Attivo" if attivo else "Off"
-                c1, c2, c3, c4, c5 = st.columns([1.8, 1.2, 0.8, 0.6, 1.2])
-                with c1:
-                    st.markdown(f"<div style='font-size:12px;'><strong>{nome_cognome}</strong></div>", unsafe_allow_html=True)
-                with c2:
-                    st.markdown(f"<div style='font-size:11px;color:#6b7280;'>@{uname}</div>", unsafe_allow_html=True)
-                with c3:
-                    st.markdown(f"<div style='font-size:11px;color:#64748b;'>{created}</div>", unsafe_allow_html=True)
-                with c4:
-                    if is_adm:
-                        st.markdown("<div style='font-size:10px;background:#3498db;color:#fff;padding:2px 6px;border-radius:4px;display:inline-block;'>admin</div>", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"<div style='font-size:11px;'>{stato_icon} {stato_txt}</div>", unsafe_allow_html=True)
+                stato = "admin" if is_adm else ("🟢" if attivo else "🔴")
+                c0, c1, c2, c3, c4, c5 = st.columns([2, 1.2, 2, 0.7, 0.7, 1.8])
+                c0.markdown(f"<div style='font-size:12px;'>{nome_cognome}</div>", unsafe_allow_html=True)
+                c1.markdown(f"<div style='font-size:11px;color:#64748b;'>@{uname}</div>", unsafe_allow_html=True)
+                c2.markdown(f"<div style='font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' title='{user_email}'>{user_email}</div>", unsafe_allow_html=True)
+                c3.markdown(f"<div style='font-size:10px;color:#94a3b8;'>{created}</div>", unsafe_allow_html=True)
+                c4.markdown(f"<div style='font-size:11px;'>{stato}</div>", unsafe_allow_html=True)
                 with c5:
-                    if not is_adm:
-                        a1, a2 = st.columns(2)
-                        with a1:
-                            label_toggle = "🔴 Off" if attivo else "🟢 On"
-                            if st.button(label_toggle, key=f"toggle_{uname}", use_container_width=True):
+                    _a, _b, _c = st.columns(3)
+                    with _a:
+                        if st.button("✉️", key=f"btn_email_{uname}", use_container_width=True, help="Email"):
+                            st.session_state.set_email_user = uname
+                            st.rerun()
+                    with _b:
+                        if not is_adm:
+                            _lab = "Off" if attivo else "On"
+                            if st.button(_lab, key=f"toggle_{uname}", use_container_width=True, help="Attiva/Disattiva"):
                                 _auth.toggle_user_active(uname)
+                                st.toast("Stato aggiornato.", icon="✅")
                                 st.rerun()
-                        with a2:
-                            if uname != st.session_state.logged_user:
-                                if st.button("🔑 Pwd", key=f"reset_{uname}", use_container_width=True):
-                                    st.session_state.admin_reset_user = uname
-                                    st.rerun()
+                    with _c:
+                        if not is_adm and uname != st.session_state.logged_user:
+                            if st.button("🔑", key=f"reset_{uname}", use_container_width=True, help="Nuova password"):
+                                st.session_state.admin_reset_user = uname
+                                st.rerun()
         if st.session_state.admin_reset_user:
             st.markdown(f"##### 🔑 Imposta nuova password per **{st.session_state.admin_reset_user}**")
             with st.form("form_reset_pwd"):
@@ -1499,7 +1571,7 @@ if st.session_state.show_utility:
                     if rp1 and rp2 and rp1 == rp2 and len(rp1) >= 6:
                         ok, msg = _auth.change_password(st.session_state.admin_reset_user, rp1)
                         if ok:
-                            st.success(msg)
+                            st.toast(msg, icon="✅")
                             st.session_state.admin_reset_user = None
                             st.rerun()
                         else:
@@ -1509,9 +1581,27 @@ if st.session_state.show_utility:
                 if rc2.form_submit_button("Annulla"):
                     st.session_state.admin_reset_user = None
                     st.rerun()
+        if st.session_state.get("set_email_user"):
+            _who = st.session_state.set_email_user
+            _current = next((x.get("email") or "" for x in _auth.get_all_users() if (x.get("username") or "").lower() == _who.lower()), "")
+            st.markdown(f"##### ✉️ Imposta email per **{_who}** (recupero password)")
+            with st.form("form_set_email"):
+                _em = st.text_input("Email", value=_current, placeholder="es. utente@email.it", key="input_email_user")
+                _c1, _c2 = st.columns(2)
+                if _c1.form_submit_button("Salva"):
+                    ok_em, msg_em = _auth.set_user_email(_who, _em)
+                    if ok_em:
+                        st.toast(msg_em, icon="✅")
+                        st.session_state.set_email_user = None
+                        st.rerun()
+                    else:
+                        st.error(msg_em)
+                if _c2.form_submit_button("Annulla"):
+                    st.session_state.set_email_user = None
+                    st.rerun()
         st.markdown("---")
         st.markdown("#### ➕ Crea nuovo utente")
-        st.caption("I nuovi utenti restano **disattivati** finché non li attivi dalla tabella (pulsante Attiva). Così abiliti l’accesso online solo quando sei pronto.")
+        st.caption("I nuovi utenti restano **disattivati** finché non li attivi dall'elenco sopra (pulsante Attiva). Così abiliti l’accesso online solo quando sei pronto.")
         with st.form("admin_nuovo_utente"):
             cn, cc = st.columns(2)
             with cn:
@@ -1519,6 +1609,7 @@ if st.session_state.show_utility:
             with cc:
                 nuovo_cognome = st.text_input("Cognome", placeholder="es. Rossi")
             nu = st.text_input("Username", placeholder="es. mario.rossi")
+            nuovo_email = st.text_input("Email (per recupero password)", placeholder="es. mario@email.it")
             np = st.text_input("Password", type="password", placeholder="minimo 6 caratteri")
             np_rip = st.text_input("Ripeti password", type="password")
             attiva_subito = st.checkbox("Attiva utente subito (può accedere dopo la creazione)", value=False)
@@ -1530,17 +1621,11 @@ if st.session_state.show_utility:
                 elif len(np) < 6:
                     st.error("La password deve essere di almeno 6 caratteri.")
                 else:
-                    ok, msg = _auth.create_user(nu, np, is_admin_user=False, nome=nuovo_nome or "", cognome=nuovo_cognome or "", attivo=attiva_subito)
+                    ok, msg = _auth.create_user(nu, np, is_admin_user=False, nome=nuovo_nome or "", cognome=nuovo_cognome or "", attivo=attiva_subito, email=nuovo_email or "")
                     if ok:
-                        _auth.init_user_data_folder(_auth.get_user_data_dir(nu), [
-                            ('database_pazienti.csv', COLS_PAZ),
-                            ('database_alimenti.csv', COLS_ALI),
-                            ('database_diete.csv', COLS_DIETA),
-                            ('database_integratori.csv', COLS_INTEGR),
-                            ('database_prescrizioni.csv', COLS_PRESCR),
-                            ('database_proteine.csv', COLS_PROT),
-                        ])
-                        st.success(msg + (" L’utente è attivo e può accedere." if attiva_subito else " Attivalo dalla tabella quando vuoi abilitarlo."))
+                        data_mod.init_user_db(_auth.get_user_data_dir(nu))
+                        _toast_msg = msg + (" L'utente è attivo e può accedere." if attiva_subito else " Attivalo dall'elenco quando vuoi abilitarlo.")
+                        st.toast(_toast_msg, icon="✅")
                     else:
                         st.error(msg)
                     st.rerun()
@@ -1551,17 +1636,50 @@ if st.session_state.show_utility:
         st.session_state.show_utility = False
         st.session_state.show_admin_section = False
         st.rerun()
+
+    if "utility_tab" not in st.session_state:
+        st.session_state.utility_tab = "backup"
+    _tabs_list = [
+        ("backup", "📦 Backup"),
+        ("ripristino", "📤 Ripristino"),
+    ]
+    if _auth:
+        _tabs_list.append(("archivi", "📁 Archivi"))
+    _tabs_list.extend([
+        ("statistiche", "📊 Statistiche"),
+        ("integrita", "🔍 Integrità"),
+        ("duplicati", "🧹 Duplicati"),
+    ])
+    if _auth and _is_admin:
+        _tabs_list.extend([("versione", "📌 Versione"), ("amministrazione", "⚙️ Admin")])
+    _tabs_list.append(("aggiornamenti", "🔄 Aggiornamenti"))
+    _valid_tabs = [t[0] for t in _tabs_list]
+    if st.session_state.utility_tab not in _valid_tabs:
+        st.session_state.utility_tab = "backup"
+    _tab = st.session_state.utility_tab
+
+    # Griglia fissa 2 righe × 5 colonne: pulsanti stesse dimensioni
+    _n = 5
+    _row1 = _tabs_list[:_n]
+    _row2 = _tabs_list[_n:_n * 2]
+    _c1 = st.columns(_n)
+    for _i, (_key, _label) in enumerate(_row1):
+        with _c1[_i]:
+            _type = "primary" if _tab == _key else "secondary"
+            if st.button(_label, key=f"util_tab_{_key}", use_container_width=True, type=_type):
+                st.session_state.utility_tab = _key
+                st.rerun()
+    _c2 = st.columns(_n)
+    for _i, (_key, _label) in enumerate(_row2):
+        with _c2[_i]:
+            _type = "primary" if _tab == _key else "secondary"
+            if st.button(_label, key=f"util_tab_{_key}", use_container_width=True, type=_type):
+                st.session_state.utility_tab = _key
+                st.rerun()
     st.markdown("---")
 
-    # Lista file database
-    DB_FILES = [
-        (DB_PAZIENTI, "Pazienti e visite"),
-        (DB_ALIMENTI, "Alimenti VLEKT"),
-        (DB_DIETE, "Piani dietetici"),
-        (DB_INTEGRATORI, "Integratori"),
-        (DB_PRESCRIZIONI, "Prescrizioni"),
-        (DB_PROTEINE, "Proteine naturali"),
-    ]
+    # Backup: un solo file SQLite per utente
+    DB_BACKUP_FILE = paths["DB_SQLITE"]
     app_dir = os.path.dirname(os.path.abspath(__file__))
     _update_info_path = os.path.join(app_dir, "update_info.json")
 
@@ -1578,65 +1696,81 @@ if st.session_state.show_utility:
     _archivi_dir = os.path.join(_udir, "archivi") if _auth else None
 
     # ── 1. BACKUP DATABASE ──
-    st.markdown("#### 📦 Backup database")
-    st.markdown("Salva tutti i file CSV in un archivio ZIP con timestamp. Conservalo in un luogo sicuro." + (" Una copia viene salvata anche in **I miei archivi**." if _auth else ""))
-    if st.button("📥 Crea backup completo", type="primary", key="btn_backup"):
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        zip_name = f"backup_vlekt_{ts}.zip"
-        zip_path = os.path.join(app_dir, zip_name)
-        try:
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for db_file, _ in DB_FILES:
-                    if os.path.exists(db_file):
-                        zf.write(db_file, os.path.basename(db_file))
-            with open(zip_path, 'rb') as f:
-                st.session_state.backup_bytes = f.read()
-            st.session_state.backup_filename = zip_name
-            if _archivi_dir:
-                os.makedirs(_archivi_dir, exist_ok=True)
-                archivi_path = os.path.join(_archivi_dir, zip_name)
-                with open(archivi_path, 'wb') as f:
-                    f.write(st.session_state.backup_bytes)
-            os.remove(zip_path)
-            st.rerun()
-        except Exception as e:
-            st.error(f"Errore durante il backup: {e}")
-
-    if 'backup_bytes' in st.session_state and st.session_state.backup_bytes:
-        st.download_button(
-            "⬇️ Scarica backup",
-            data=st.session_state.backup_bytes,
-            file_name=st.session_state.get('backup_filename', 'backup_vlekt.zip'),
-            mime="application/zip",
-            key="dl_backup"
-        )
-        if st.button("🗑️ Annulla download", key="btn_clear_backup"):
-            del st.session_state.backup_bytes
-            if 'backup_filename' in st.session_state:
-                del st.session_state.backup_filename
-            st.rerun()
-
-    st.markdown("---")
-
-    # ── 2. RESTORE DA BACKUP ──
-    st.markdown("#### 📤 Ripristino da backup")
-    st.markdown("Carica un file ZIP di backup precedente per sostituire i database attuali. **Attenzione: sovrascrive i dati correnti.**")
-    file_restore = st.file_uploader("Carica file ZIP di backup", type=["zip"], key="upload_restore")
-    if file_restore:
-        if st.button("⚠️ Ripristina database (conferma)", type="primary", key="btn_restore"):
+    if _tab == "backup":
+        st.markdown("#### 📦 Backup database")
+        st.markdown("Salva il database (SQLite) in un archivio ZIP con timestamp. Conservalo in un luogo sicuro." + (" Una copia viene salvata anche in **I miei archivi**." if _auth else ""))
+        if st.button("📥 Crea backup completo", type="primary", key="btn_backup"):
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            zip_name = f"backup_vlekt_{ts}.zip"
+            zip_path = os.path.join(app_dir, zip_name)
             try:
-                with zipfile.ZipFile(file_restore, 'r') as zf:
-                    for name in zf.namelist():
-                        if name.endswith('.csv'):
-                            zf.extract(name, _udir)
-                st.success("✅ Backup ripristinato. Ricarica la pagina per vedere i dati aggiornati.")
+                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    if os.path.exists(DB_BACKUP_FILE):
+                        zf.write(DB_BACKUP_FILE, "vlekt.db")
+                with open(zip_path, 'rb') as f:
+                    st.session_state.backup_bytes = f.read()
+                st.session_state.backup_filename = zip_name
+                if _archivi_dir:
+                    os.makedirs(_archivi_dir, exist_ok=True)
+                    archivi_path = os.path.join(_archivi_dir, zip_name)
+                    with open(archivi_path, 'wb') as f:
+                        f.write(st.session_state.backup_bytes)
+                os.remove(zip_path)
                 st.rerun()
             except Exception as e:
-                st.error(f"Errore durante il ripristino: {e}")
+                st.error(f"Errore durante il backup: {e}")
 
-    # ── 2b. I MIEI ARCHIVI (solo con login: ogni utente ha la sua cartella archivi) ──
-    if _auth and _archivi_dir:
-        st.markdown("---")
+        if 'backup_bytes' in st.session_state and st.session_state.backup_bytes:
+            st.download_button(
+                "⬇️ Scarica backup",
+                data=st.session_state.backup_bytes,
+                file_name=st.session_state.get('backup_filename', 'backup_vlekt.zip'),
+                mime="application/zip",
+                key="dl_backup"
+            )
+            if st.button("🗑️ Annulla download", key="btn_clear_backup"):
+                del st.session_state.backup_bytes
+                if 'backup_filename' in st.session_state:
+                    del st.session_state.backup_filename
+                st.rerun()
+
+    # ── 2. RESTORE DA BACKUP ──
+    if _tab == "ripristino":
+        st.markdown("#### 📤 Ripristino da backup")
+        st.markdown("Carica un file ZIP di backup precedente per sostituire il database attuale. **Attenzione: sovrascrive i dati correnti.**")
+        file_restore = st.file_uploader("Carica file ZIP di backup", type=["zip"], key="upload_restore")
+        if file_restore:
+            if st.button("⚠️ Ripristina database (conferma)", type="primary", key="btn_restore"):
+                try:
+                    with zipfile.ZipFile(file_restore, 'r') as zf:
+                        names = zf.namelist()
+                        has_db = any('vlekt.db' in n for n in names)
+                        if has_db:
+                            for n in names:
+                                if 'vlekt.db' in n and not n.startswith('__'):
+                                    zf.extract(n, _udir)
+                                    _extracted = os.path.join(_udir, n)
+                                    _dest = os.path.join(_udir, "vlekt.db")
+                                    if os.path.isfile(_extracted):
+                                        if _extracted != _dest:
+                                            if os.path.exists(_dest):
+                                                os.remove(_dest)
+                                            os.rename(_extracted, _dest)
+                                    break
+                        else:
+                            for name in names:
+                                if name.endswith('.csv'):
+                                    zf.extract(name, _udir)
+                            _db_path = os.path.join(_udir, "vlekt.db")
+                            if os.path.exists(_db_path):
+                                os.remove(_db_path)
+                    st.success("✅ Backup ripristinato. Ricarica la pagina per vedere i dati aggiornati.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Errore durante il ripristino: {e}")
+
+    # ── 2b. I MIEI ARCHIVI ──
+    if _tab == "archivi" and _auth and _archivi_dir:
         st.markdown("#### 📁 I miei archivi")
         st.markdown("Backup salvati nella tua area. Puoi scaricarli o ripristinare da uno di essi.")
         os.makedirs(_archivi_dir, exist_ok=True)
@@ -1661,9 +1795,26 @@ if st.session_state.show_utility:
                 if st.button("✅ Conferma ripristino", type="primary", key="confirm_restore_arch"):
                     try:
                         with zipfile.ZipFile(_path, 'r') as zf:
-                            for name in zf.namelist():
-                                if name.endswith('.csv'):
-                                    zf.extract(name, _udir)
+                            names = zf.namelist()
+                            has_db = any('vlekt.db' in n for n in names)
+                            if has_db:
+                                for n in names:
+                                    if 'vlekt.db' in n and not n.startswith('__'):
+                                        zf.extract(n, _udir)
+                                        _extracted = os.path.join(_udir, n)
+                                        _dest = os.path.join(_udir, "vlekt.db")
+                                        if os.path.isfile(_extracted) and _extracted != _dest:
+                                            if os.path.exists(_dest):
+                                                os.remove(_dest)
+                                            os.rename(_extracted, _dest)
+                                        break
+                            else:
+                                for name in names:
+                                    if name.endswith('.csv'):
+                                        zf.extract(name, _udir)
+                                _db_path = os.path.join(_udir, "vlekt.db")
+                                if os.path.exists(_db_path):
+                                    os.remove(_db_path)
                         del st.session_state.restore_archivo_path
                         st.success("Archivio ripristinato. Ricarica la pagina.")
                         st.rerun()
@@ -1673,111 +1824,101 @@ if st.session_state.show_utility:
                     del st.session_state.restore_archivo_path
                     st.rerun()
 
-    st.markdown("---")
-
     # ── 3. STATISTICHE ──
-    st.markdown("#### 📊 Statistiche database")
-    n_paz = len(df_p.drop_duplicates('Codice_Fiscale')) if not df_p.empty else 0
-    n_visite = len(df_p)
-    n_alimenti = len(df_a)
-    n_diete_righe = len(df_d)
-    n_integr = len(df_i)
-    n_prescriz = len(df_pr)
-    n_prot = len(df_prot)
+    if _tab == "statistiche":
+        st.markdown("#### 📊 Statistiche database")
+        n_paz = len(df_p.drop_duplicates('Codice_Fiscale')) if not df_p.empty else 0
+        n_visite = len(df_p)
+        n_alimenti = len(df_a)
+        n_diete_righe = len(df_d)
+        n_integr = len(df_i)
+        n_prescriz = len(df_pr)
+        n_prot = len(df_prot)
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("👤 Pazienti unici", n_paz)
-        st.metric("📋 Visite totali", n_visite)
-    with col2:
-        st.metric("🍱 Alimenti VLEKT", n_alimenti)
-        st.metric("📅 Righe piani dieta", n_diete_righe)
-    with col3:
-        st.metric("💊 Integratori", n_integr)
-        st.metric("📝 Prescrizioni", n_prescriz)
-    st.metric("🥩 Proteine naturali", n_prot)
-
-    st.markdown("---")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("👤 Pazienti unici", n_paz)
+            st.metric("📋 Visite totali", n_visite)
+        with col2:
+            st.metric("🍱 Alimenti VLEKT", n_alimenti)
+            st.metric("📅 Righe piani dieta", n_diete_righe)
+        with col3:
+            st.metric("💊 Integratori", n_integr)
+            st.metric("📝 Prescrizioni", n_prescriz)
+        st.metric("🥩 Proteine naturali", n_prot)
 
     # ── 4. VERIFICA INTEGRITÀ ──
-    st.markdown("#### 🔍 Verifica integrità")
-    st.markdown("Controlla riferimenti orfani (diete o prescrizioni senza paziente corrispondente).")
-    if st.button("Esegui verifica", key="btn_verify"):
-        cf_pazienti = set(df_p['Codice_Fiscale'].astype(str).str.strip().unique()) if not df_p.empty else set()
-        orfani_d = df_d[~df_d['Codice_Fiscale'].astype(str).str.strip().isin(cf_pazienti)] if not df_d.empty else pd.DataFrame()
-        orfani_pr = df_pr[~df_pr['Codice_Fiscale'].astype(str).str.strip().isin(cf_pazienti)] if not df_pr.empty else pd.DataFrame()
-        if orfani_d.empty and orfani_pr.empty:
-            st.success("✅ Nessun riferimento orfano trovato.")
-        else:
-            if not orfani_d.empty:
-                st.warning(f"⚠️ **{len(orfani_d)}** righe di dieta riferite a CF non presenti nei pazienti.")
-            if not orfani_pr.empty:
-                st.warning(f"⚠️ **{len(orfani_pr)}** prescrizioni riferite a CF non presenti nei pazienti.")
-
-    st.markdown("---")
+    if _tab == "integrita":
+        st.markdown("#### 🔍 Verifica integrità")
+        st.markdown("Controlla riferimenti orfani (diete o prescrizioni senza paziente corrispondente).")
+        if st.button("Esegui verifica", key="btn_verify"):
+            cf_pazienti = set(df_p['Codice_Fiscale'].astype(str).str.strip().unique()) if not df_p.empty else set()
+            orfani_d = df_d[~df_d['Codice_Fiscale'].astype(str).str.strip().isin(cf_pazienti)] if not df_d.empty else pd.DataFrame()
+            orfani_pr = df_pr[~df_pr['Codice_Fiscale'].astype(str).str.strip().isin(cf_pazienti)] if not df_pr.empty else pd.DataFrame()
+            if orfani_d.empty and orfani_pr.empty:
+                st.success("✅ Nessun riferimento orfano trovato.")
+            else:
+                if not orfani_d.empty:
+                    st.warning(f"⚠️ **{len(orfani_d)}** righe di dieta riferite a CF non presenti nei pazienti.")
+                if not orfani_pr.empty:
+                    st.warning(f"⚠️ **{len(orfani_pr)}** prescrizioni riferite a CF non presenti nei pazienti.")
 
     # ── 5. PULIZIA DUPLICATI ──
-    st.markdown("#### 🧹 Pulizia duplicati")
-    st.markdown("Rimuove righe duplicate dai database. Per pazienti e diete si mantiene l’ultima occorrenza; per gli altri la prima.")
-    if st.button("Esegui pulizia duplicati", type="primary", key="btn_clean_dup"):
-        modifiche = []
-        # Pazienti: stesso CF + stessa Data_Visita → tiene l'ultima
-        if not df_p.empty:
-            n_prima = len(df_p)
+    if _tab == "duplicati":
+        st.markdown("#### 🧹 Pulizia duplicati")
+        st.markdown("Rimuove righe duplicate dai database. Per pazienti e diete si mantiene l'ultima occorrenza; per gli altri la prima.")
+        if st.button("Esegui pulizia duplicati", type="primary", key="btn_clean_dup"):
+            modifiche = []
+            if not df_p.empty:
+                n_prima = len(df_p)
             df_p_clean = df_p.drop_duplicates(subset=['Codice_Fiscale', 'Data_Visita'], keep='last')
             if len(df_p_clean) < n_prima:
-                df_p_clean.to_csv(DB_PAZIENTI, index=False)
+                data_mod.save_table(paths, "DB_PAZIENTI", df_p_clean)
                 modifiche.append(f"Pazienti: rimossi {n_prima - len(df_p_clean)} duplicati")
         # Alimenti: stesso nome → tiene la prima
-        if not df_a.empty:
-            n_prima = len(df_a)
-            df_a_clean = df_a.drop_duplicates(subset=['Alimento'], keep='first')
-            if len(df_a_clean) < n_prima:
-                df_a_clean.to_csv(DB_ALIMENTI, index=False)
-                modifiche.append(f"Alimenti: rimossi {n_prima - len(df_a_clean)} duplicati")
-        # Diete: righe identiche → tiene la prima
-        if not df_d.empty:
-            n_prima = len(df_d)
-            df_d_clean = df_d.drop_duplicates(keep='first')
-            if len(df_d_clean) < n_prima:
-                df_d_clean.to_csv(DB_DIETE, index=False)
-                modifiche.append(f"Diete: rimossi {n_prima - len(df_d_clean)} duplicati")
-        # Integratori: stesso nome → tiene la prima
-        if not df_i.empty:
-            n_prima = len(df_i)
-            df_i_clean = df_i.drop_duplicates(subset=['Nome_Integratore'], keep='first')
-            if len(df_i_clean) < n_prima:
-                df_i_clean.to_csv(DB_INTEGRATORI, index=False)
-                modifiche.append(f"Integratori: rimossi {n_prima - len(df_i_clean)} duplicati")
-        # Prescrizioni: stesso CF + Data_Visita + Data_Inizio + Nome → tiene la prima
-        if not df_pr.empty:
-            n_prima = len(df_pr)
-            df_pr_clean = df_pr.drop_duplicates(subset=['Codice_Fiscale', 'Data_Visita', 'Data_Inizio', 'Nome_Integratore'], keep='first')
-            if len(df_pr_clean) < n_prima:
-                df_pr_clean.to_csv(DB_PRESCRIZIONI, index=False)
-                modifiche.append(f"Prescrizioni: rimossi {n_prima - len(df_pr_clean)} duplicati")
-        # Proteine: stesso Nome → tiene la prima
-        if not df_prot.empty:
-            n_prima = len(df_prot)
-            df_prot_clean = df_prot.drop_duplicates(subset=['Nome'], keep='first')
-            if len(df_prot_clean) < n_prima:
-                df_prot_clean.to_csv(DB_PROTEINE, index=False)
-                modifiche.append(f"Proteine: rimossi {n_prima - len(df_prot_clean)} duplicati")
+            if not df_a.empty:
+                n_prima = len(df_a)
+                df_a_clean = df_a.drop_duplicates(subset=['Alimento'], keep='first')
+                if len(df_a_clean) < n_prima:
+                    data_mod.save_table(paths, "DB_ALIMENTI", df_a_clean)
+                    modifiche.append(f"Alimenti: rimossi {n_prima - len(df_a_clean)} duplicati")
+            if not df_d.empty:
+                n_prima = len(df_d)
+                df_d_clean = df_d.drop_duplicates(keep='first')
+                if len(df_d_clean) < n_prima:
+                    data_mod.save_table(paths, "DB_DIETE", df_d_clean)
+                    modifiche.append(f"Diete: rimossi {n_prima - len(df_d_clean)} duplicati")
+            if not df_i.empty:
+                n_prima = len(df_i)
+                df_i_clean = df_i.drop_duplicates(subset=['Nome_Integratore'], keep='first')
+                if len(df_i_clean) < n_prima:
+                    data_mod.save_table(paths, "DB_INTEGRATORI", df_i_clean)
+                    modifiche.append(f"Integratori: rimossi {n_prima - len(df_i_clean)} duplicati")
+            if not df_pr.empty:
+                n_prima = len(df_pr)
+                df_pr_clean = df_pr.drop_duplicates(subset=['Codice_Fiscale', 'Data_Visita', 'Data_Inizio', 'Nome_Integratore'], keep='first')
+                if len(df_pr_clean) < n_prima:
+                    data_mod.save_table(paths, "DB_PRESCRIZIONI", df_pr_clean)
+                    modifiche.append(f"Prescrizioni: rimossi {n_prima - len(df_pr_clean)} duplicati")
+            if not df_prot.empty:
+                n_prima = len(df_prot)
+                df_prot_clean = df_prot.drop_duplicates(subset=['Nome'], keep='first')
+                if len(df_prot_clean) < n_prima:
+                    data_mod.save_table(paths, "DB_PROTEINE", df_prot_clean)
+                    modifiche.append(f"Proteine: rimossi {n_prima - len(df_prot_clean)} duplicati")
 
-        if modifiche:
-            for m in modifiche:
-                st.success(f"✅ {m}")
-            st.info("Ricarica la pagina per vedere i dati aggiornati.")
-            st.rerun()
-        else:
-            st.success("✅ Nessun duplicato trovato.")
+            if modifiche:
+                for m in modifiche:
+                    st.success(f"✅ {m}")
+                st.info("Ricarica la pagina per vedere i dati aggiornati.")
+                st.rerun()
+            else:
+                st.success("✅ Nessun duplicato trovato.")
 
-    st.markdown("---")
-
-    # ── 6. GESTIONE VERSIONE E AGGIORNAMENTI (solo amministratore) ──
-    if _auth and _is_admin:
-        st.markdown("#### 📌 Gestione versione e aggiornamenti")
-        st.markdown("Imposta qui la **versione pubblicata** che gli utenti vedono come ultima disponibile e l’**URL** da cui scaricare l’aggiornamento.")
+    # ── 6. GESTIONE VERSIONE (solo admin) ──
+    if _tab == "versione" and _auth and _is_admin:
+        st.markdown("#### 📌 Gestione versione e aggiornamenti (solo admin)")
+        st.markdown("Quando pubblichi una **nuova versione** dell’app (es. dopo aver creato un nuovo installabile): imposta qui il **numero di versione** che gli utenti devono vedere e l’**URL** da cui scaricare l’aggiornamento. Gli utenti vedranno l’avviso in cima alla pagina (o in **Verifica aggiornamenti** sotto) e potranno scaricare e installare la nuova versione.")
         _pub_ver, _pub_url = read_update_info(app_dir, VERSION)
         _col_v, _col_u = st.columns(2)
         with _col_v:
@@ -1787,28 +1928,37 @@ if st.session_state.show_utility:
         if st.button("💾 Salva versione e URL", type="primary", key="btn_save_update_info"):
             _v = str(_new_ver).strip() or VERSION
             if _write_update_info(_v, str(_new_url).strip()):
-                st.success("Salvato. Gli utenti vedranno la nuova versione e il link di download quando verificano gli aggiornamenti.")
+                st.toast("Versione e URL salvati. Gli utenti vedranno l'avviso di aggiornamento.", icon="✅")
                 st.rerun()
             else:
                 st.error("Impossibile salvare (controlla i permessi della cartella dell’app).")
         st.markdown("---")
 
-    # ── 7. CONTROLLA AGGIORNAMENTI (tutti gli utenti) ──
-    st.markdown("#### 🔄 Verifica aggiornamenti")
-    st.markdown("Controlla se è disponibile una nuova versione dell’applicazione.")
-    if st.button("Verifica aggiornamenti", key="btn_check_update"):
-        _pub_ver, _pub_url = read_update_info(app_dir, VERSION)
-        if parse_version(_pub_ver) > parse_version(VERSION):
-            st.success(f"✅ È disponibile una nuova versione: **{_pub_ver}**.")
-            if _pub_url:
-                st.markdown(f"Scarica l’aggiornamento: [**Scarica aggiornamento**]({_pub_url})")
-                st.link_button("⬇️ Scarica aggiornamento", _pub_url, type="primary", key="link_download_update")
-            else:
-                st.info("L’amministratore non ha ancora impostato il link di download. Contattalo per ottenere l’aggiornamento.")
+    # ── 7. CONTROLLA AGGIORNAMENTI ──
+    if _tab == "aggiornamenti":
+        st.markdown("#### 🔄 Verifica aggiornamenti")
+        _changelog = read_changelog_for_version(app_dir, VERSION)
+        if _changelog:
+            with st.expander("📋 Novità in questa versione", expanded=True):
+                st.markdown(_changelog)
+        if _auth and _is_admin:
+            st.caption("In qualità di **amministratore** gestisci la versione pubblicata nel tab Versione. Qui sotto puoi controllare cosa vedono gli utenti.")
         else:
-            st.info(f"Sei aggiornato: versione **{VERSION}**.")
-    st.markdown("---")
-    if _auth and _is_admin:
+            st.markdown("Controlla se è disponibile una nuova versione dell'applicazione da installare.")
+        if st.button("Verifica aggiornamenti", key="btn_check_update"):
+            _pub_ver, _pub_url = read_update_info(app_dir, VERSION)
+            if parse_version(_pub_ver) > parse_version(VERSION):
+                st.success(f"✅ È disponibile una nuova versione: **{_pub_ver}**.")
+                if _pub_url:
+                    st.markdown(f"Scarica l’aggiornamento: [**Scarica aggiornamento**]({_pub_url})")
+                    st.link_button("⬇️ Scarica aggiornamento", _pub_url, type="primary", key="link_download_update")
+                else:
+                    st.info("L’amministratore non ha ancora impostato il link di download. Contattalo per ottenere l’aggiornamento.")
+            else:
+                st.info(f"Sei aggiornato: versione **{VERSION}**.")
+
+    # ── 8. AMMINISTRAZIONE ──
+    if _tab == "amministrazione" and _auth and _is_admin:
         st.markdown("#### ⚙️ Amministrazione")
         if st.button("👥 Amministrazione utenti", type="primary", key="btn_admin_from_utility"):
             st.session_state.show_admin_section = True
@@ -1830,7 +1980,7 @@ if st.session_state.show_db_alimenti:
             st.session_state.confirm_svuota_alimenti = False
         if st.session_state.confirm_svuota_alimenti:
             if st.button("⚠️ Confermi? Cancella TUTTI", key="btn_si_svuota_ali", use_container_width=True, type="primary"):
-                pd.DataFrame(columns=COLS_ALI).to_csv(DB_ALIMENTI, index=False)
+                data_mod.save_table(paths, "DB_ALIMENTI", pd.DataFrame(columns=COLS_ALI))
                 st.session_state.confirm_svuota_alimenti = False
                 st.success("✅ Database alimenti svuotato.")
                 st.rerun()
@@ -1860,7 +2010,7 @@ if st.session_state.show_db_alimenti:
             cs, ca = st.columns(2)
             if cs.form_submit_button("💾 Salva Modifiche", use_container_width=True, type="primary"):
                 df_a.loc[idx_e, ['Alimento','Kcal','Carbo_Netti','Prot','Grassi','Porzioni_Confezione']] = [ne_a, vke_a, vce_a, vpe_a, vge_a, v_porz_e]
-                df_a.to_csv(DB_ALIMENTI, index=False)
+                data_mod.save_table(paths, "DB_ALIMENTI", df_a)
                 st.session_state.edit_food_idx = None
                 st.success(f"✅ '{ne_a}' aggiornato!")
                 st.rerun()
@@ -1882,7 +2032,7 @@ if st.session_state.show_db_alimenti:
                 v_porz = st.text_input("Porzioni in 1 Confezione (es. 5)")
                 if st.form_submit_button("💾 Salva nel Database", use_container_width=True, type="primary"):
                     if n_a:
-                        pd.concat([df_a, pd.DataFrame([[n_a, vk_a, vc_a, vp_a, vg_a, v_porz]], columns=COLS_ALI)]).to_csv(DB_ALIMENTI, index=False)
+                        data_mod.save_table(paths, "DB_ALIMENTI", pd.concat([df_a, pd.DataFrame([[n_a, vk_a, vc_a, vp_a, vg_a, v_porz]], columns=COLS_ALI)]))
                         st.success(f"✅ '{n_a}' aggiunto!")
                         st.rerun()
                     else:
@@ -1920,7 +2070,7 @@ if st.session_state.show_db_alimenti:
                             else:
                                 df_a = pd.concat([df_a, pd.DataFrame(nuovi)], ignore_index=True)
                             df_a = df_a[COLS_ALI]
-                            df_a.to_csv(DB_ALIMENTI, index=False)
+                            data_mod.save_table(paths, "DB_ALIMENTI", df_a)
                             st.success(f"✅ Importati {len(nuovi) if not sovrascrivi else len(prodotti)} prodotti.")
                             st.rerun()
                         st.info(f"Trovati {len(prodotti)} prodotti. {len(nuovi)} nuovi, {len(prodotti)-len(nuovi)} già presenti.")
@@ -1951,7 +2101,7 @@ if st.session_state.show_db_alimenti:
                     st.warning(f"⚠️ Eliminare **{row_a['Alimento']}**? L'azione è irreversibile.")
                     cda1, cda2 = st.columns(2)
                     if cda1.button("✅ Sì, elimina", key=f"conf_si_ali_{real_idx_a}", use_container_width=True, type="primary"):
-                        df_a.drop(real_idx_a).to_csv(DB_ALIMENTI, index=False)
+                        data_mod.save_table(paths, "DB_ALIMENTI", df_a.drop(real_idx_a))
                         st.session_state.confirm_del_ali = None
                         st.rerun()
                     if cda2.button("❌ Annulla", key=f"conf_no_ali_{real_idx_a}", use_container_width=True):
@@ -2001,7 +2151,7 @@ elif st.session_state.show_db_integratori:
             cs, cc = st.columns(2)
             if cs.form_submit_button("💾 Salva Modifiche", use_container_width=True, type="primary"):
                 df_i.loc[idx_ei, ['Nome_Integratore','Categoria','Descrizione']] = [ei_nome, ei_cat, ei_desc]
-                df_i.to_csv(DB_INTEGRATORI, index=False)
+                data_mod.save_table(paths, "DB_INTEGRATORI", df_i)
                 st.session_state.edit_integr_idx = None
                 st.success(f"✅ '{ei_nome}' aggiornato!")
                 st.rerun()
@@ -2018,7 +2168,7 @@ elif st.session_state.show_db_integratori:
                 ni_desc = st.text_area("Descrizione / Note", height=80)
                 if st.form_submit_button("💾 Salva nel Database", use_container_width=True, type="primary"):
                     if ni_nome:
-                        pd.concat([df_i, pd.DataFrame([[ni_nome, ni_cat, ni_desc]], columns=COLS_INTEGR)]).to_csv(DB_INTEGRATORI, index=False)
+                        data_mod.save_table(paths, "DB_INTEGRATORI", pd.concat([df_i, pd.DataFrame([[ni_nome, ni_cat, ni_desc]], columns=COLS_INTEGR)]))
                         st.success(f"✅ '{ni_nome}' aggiunto!")
                         st.rerun()
                     else:
@@ -2111,7 +2261,7 @@ elif st.session_state.show_db_integratori:
                         st.error(f"⚠️ Eliminare definitivamente **{row_i['Nome_Integratore']}**?")
                         cd1, cd2 = st.columns(2)
                         if cd1.button("✅ Sì, elimina", key=f"conf_si_{real_idx}", use_container_width=True, type="primary"):
-                            df_i.drop(real_idx).to_csv(DB_INTEGRATORI, index=False)
+                            data_mod.save_table(paths, "DB_INTEGRATORI", df_i.drop(real_idx))
                             st.session_state.confirm_del_integr = None
                             st.rerun()
                         if cd2.button("❌ Annulla", key=f"conf_no_{real_idx}", use_container_width=True):
@@ -2164,7 +2314,7 @@ elif st.session_state.show_db_proteine:
             cs, cc = st.columns(2)
             if cs.form_submit_button("💾 Salva Modifiche", use_container_width=True, type="primary"):
                 df_prot.loc[idx_ep] = [ep_nome, ep_cat, ep_g, ep_kcal, ep_prot, ep_gras, ep_carb, ep_note]
-                df_prot.to_csv(DB_PROTEINE, index=False)
+                data_mod.save_table(paths, "DB_PROTEINE", df_prot)
                 st.session_state.edit_prot_idx = None
                 st.success(f"✅ '{ep_nome}' aggiornato!")
                 st.rerun()
@@ -2186,7 +2336,7 @@ elif st.session_state.show_db_proteine:
                 np_note = st.text_area("Note (es. cottura consigliata, varianti...)", height=70)
                 if st.form_submit_button("💾 Salva nel Database", use_container_width=True, type="primary"):
                     if np_nome:
-                        pd.concat([df_prot, pd.DataFrame([[np_nome, np_cat, np_g, np_kcal, np_prot, np_gras, np_carb, np_note]], columns=COLS_PROT)]).to_csv(DB_PROTEINE, index=False)
+                        data_mod.save_table(paths, "DB_PROTEINE", pd.concat([df_prot, pd.DataFrame([[np_nome, np_cat, np_g, np_kcal, np_prot, np_gras, np_carb, np_note]], columns=COLS_PROT)]))
                         st.success(f"✅ '{np_nome}' aggiunto!")
                         st.rerun()
                     else:
@@ -2218,7 +2368,7 @@ elif st.session_state.show_db_proteine:
                     st.warning(f"⚠️ Eliminare **{row_p['Nome']}**? L'azione è irreversibile.")
                     cdp1, cdp2 = st.columns(2)
                     if cdp1.button("✅ Sì, elimina", key=f"conf_si_prot_{real_idx_p}", use_container_width=True, type="primary"):
-                        df_prot.drop(real_idx_p).to_csv(DB_PROTEINE, index=False)
+                        data_mod.save_table(paths, "DB_PROTEINE", df_prot.drop(real_idx_p))
                         st.session_state.confirm_del_prot = None
                         st.rerun()
                     if cdp2.button("❌ Annulla", key=f"conf_no_prot_{real_idx_p}", use_container_width=True):
@@ -2483,7 +2633,7 @@ elif p_r is not None:
                                 st.session_state.m_modulo = False
                                 st.session_state.idx_mod = None
                                 
-                            df_p.to_csv(DB_PAZIENTI, index=False)
+                            data_mod.save_table(paths, "DB_PAZIENTI", df_p)
                             st.rerun()
 
                 else:
@@ -2697,14 +2847,14 @@ elif p_r is not None:
                         if cv1.button("✅ Sì, elimina visita", key="conf_si_visita", use_container_width=True, type="primary"):
                             cf_vis = str(p_r['Codice_Fiscale']).strip()
                             data_vis = str(rv_sel['Data_Visita']).strip()
-                            df_p.drop(idx_sel).to_csv(DB_PAZIENTI, index=False)
+                            data_mod.save_table(paths, "DB_PAZIENTI", df_p.drop(idx_sel))
                             # Cascade: rimuovi diete e prescrizioni associate a questa visita
                             mask_d = (df_d['Codice_Fiscale'].astype(str).str.strip() == cf_vis) & (df_d['Data_Visita'].astype(str).str.strip() == data_vis)
                             mask_pr = (df_pr['Codice_Fiscale'].astype(str).str.strip() == cf_vis) & (df_pr['Data_Visita'].astype(str).str.strip() == data_vis)
                             if mask_d.any():
-                                df_d[~mask_d].to_csv(DB_DIETE, index=False)
+                                data_mod.save_table(paths, "DB_DIETE", df_d[~mask_d])
                             if mask_pr.any():
-                                df_pr[~mask_pr].to_csv(DB_PRESCRIZIONI, index=False)
+                                data_mod.save_table(paths, "DB_PRESCRIZIONI", df_pr[~mask_pr])
                             st.session_state.confirm_del_visita = False
                             st.session_state.visita_idx_sel = None
                             st.rerun()
@@ -2721,9 +2871,9 @@ elif p_r is not None:
                         cd1, cd2 = st.columns(2)
                         if cd1.button("✅ SÌ, ELIMINA DEFINITIVAMENTE", use_container_width=True, type="primary"):
                             cf_paz = p_r['Codice_Fiscale']
-                            df_p[df_p['Codice_Fiscale'] != cf_paz].to_csv(DB_PAZIENTI, index=False)
-                            df_d[df_d['Codice_Fiscale'] != cf_paz].to_csv(DB_DIETE, index=False)
-                            df_pr[df_pr['Codice_Fiscale'] != cf_paz].to_csv(DB_PRESCRIZIONI, index=False)
+                            data_mod.save_table(paths, "DB_PAZIENTI", df_p[df_p['Codice_Fiscale'] != cf_paz])
+                            data_mod.save_table(paths, "DB_DIETE", df_d[df_d['Codice_Fiscale'] != cf_paz])
+                            data_mod.save_table(paths, "DB_PRESCRIZIONI", df_pr[df_pr['Codice_Fiscale'] != cf_paz])
                             st.session_state.p_attivo = None; st.session_state.idx_mod = None
                             st.session_state.m_modulo = False; st.session_state.confirm_delete_paz = False
                             st.session_state.visita_idx_sel = None; st.rerun()
@@ -2766,12 +2916,12 @@ elif p_r is not None:
                     df_p.loc[mask, 'Indirizzo'] = e_indirizzo; df_p.loc[mask, 'Cellulare'] = e_cell
                     df_p.loc[mask, 'Email'] = e_email; df_p.loc[mask, 'Data_Nascita'] = e_nascita
                     df_p.loc[mask, 'Luogo_Nascita'] = e_luogo
-                    df_p.to_csv(DB_PAZIENTI, index=False)
+                    data_mod.save_table(paths, "DB_PAZIENTI", df_p)
                     if e_cf != p_r['Codice_Fiscale']:
                         df_d.loc[df_d['Codice_Fiscale'] == p_r['Codice_Fiscale'], 'Codice_Fiscale'] = e_cf
-                        df_d.to_csv(DB_DIETE, index=False)
+                        data_mod.save_table(paths, "DB_DIETE", df_d)
                         df_pr.loc[df_pr['Codice_Fiscale'] == p_r['Codice_Fiscale'], 'Codice_Fiscale'] = e_cf
-                        df_pr.to_csv(DB_PRESCRIZIONI, index=False)
+                        data_mod.save_table(paths, "DB_PRESCRIZIONI", df_pr)
                     st.session_state.edit_anagrafica = False
                     st.session_state.p_attivo = df_p[df_p['Codice_Fiscale'] == e_cf].iloc[0].to_dict()
                     st.rerun()
@@ -3101,7 +3251,7 @@ elif p_r is not None:
                                 p_r['Codice_Fiscale'], visita_selezionata, step_sel, giorni_sel, pasto_sel, nome_voce, 1,
                                 kcal_p, carb_p, prot_p, gras_p
                             ]
-                            pd.concat([df_d, pd.DataFrame([n_d], columns=COLS_DIETA)]).to_csv(DB_DIETE, index=False)
+                            data_mod.save_table(paths, "DB_DIETE", pd.concat([df_d, pd.DataFrame([n_d], columns=COLS_DIETA)]))
                             st.rerun()
                     else:
                         st.warning("⚠️ Nessuna proteina nel database. Aggiungile dal menu **🥩 DB Proteine Naturali** in sidebar.")
@@ -3134,7 +3284,7 @@ elif p_r is not None:
                                     to_f(b_info['Kcal'])*quant, to_f(b_info['Carbo_Netti'])*quant,
                                     to_f(b_info['Prot'])*quant, to_f(b_info['Grassi'])*quant
                                 ]
-                                pd.concat([df_d, pd.DataFrame([n_d], columns=COLS_DIETA)]).to_csv(DB_DIETE, index=False)
+                                data_mod.save_table(paths, "DB_DIETE", pd.concat([df_d, pd.DataFrame([n_d], columns=COLS_DIETA)]))
                                 st.rerun()
                     else:
                         st.warning("Il database alimenti è vuoto.")
@@ -3359,7 +3509,7 @@ elif p_r is not None:
                             st.warning(f"⚠️ Eliminare **{r_d['Alimento']}** ({r_d['Pasto']})? L'azione è irreversibile.")
                             cp1, cp2 = st.columns(2)
                             if cp1.button("✅ Sì, elimina", key=f"conf_si_pasto_{id_d}", use_container_width=True, type="primary"):
-                                df_d.drop(id_d).to_csv(DB_DIETE, index=False)
+                                data_mod.save_table(paths, "DB_DIETE", df_d.drop(id_d))
                                 st.session_state.confirm_del_pasto = None
                                 st.rerun()
                             if cp2.button("❌ Annulla", key=f"conf_no_pasto_{id_d}", use_container_width=True):
@@ -3392,7 +3542,7 @@ elif p_r is not None:
                                         df_d.loc[id_d, 'Carbo_Tot']  = round(carbo_u * nuova_qt, 2)
                                         df_d.loc[id_d, 'Prot_Tot']   = round(prot_u  * nuova_qt, 2)
                                         df_d.loc[id_d, 'Grassi_Tot'] = round(gras_u  * nuova_qt, 2)
-                                        df_d.to_csv(DB_DIETE, index=False)
+                                        data_mod.save_table(paths, "DB_DIETE", df_d)
                                         st.rerun()
                                     else:
                                         st.session_state.confirm_del_pasto = id_d
@@ -3409,7 +3559,7 @@ elif p_r is not None:
                                     df_d.loc[id_d, 'Carbo_Tot']  = round(carbo_u * nuova_qt, 2)
                                     df_d.loc[id_d, 'Prot_Tot']   = round(prot_u  * nuova_qt, 2)
                                     df_d.loc[id_d, 'Grassi_Tot'] = round(gras_u  * nuova_qt, 2)
-                                    df_d.to_csv(DB_DIETE, index=False)
+                                    data_mod.save_table(paths, "DB_DIETE", df_d)
                                     st.rerun()
 
                                 if c_del.button("🗑️", key=f"deli_{id_d}", use_container_width=True):
@@ -3468,7 +3618,7 @@ elif p_r is not None:
                                 (df_d['Step'].astype(str).str.strip() == str(step_sel)) &
                                 (df_d['Giorni'].astype(str).str.strip() == str(giorni_sel))
                             )
-                            df_d[mask_keep].to_csv(DB_DIETE, index=False)
+                            data_mod.save_table(paths, "DB_DIETE", df_d[mask_keep])
                             st.session_state.confirm_del_piano = False
                             st.rerun()
                         if cpi2.button("❌ Annulla", key="conf_no_piano", use_container_width=True):
@@ -3528,7 +3678,7 @@ elif p_r is not None:
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
-            df_pr_fresh = data_mod.carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
+            df_pr_fresh = data_mod.load_table(paths, "DB_PRESCRIZIONI", COLS_PRESCR)
             prescr_visita = df_pr_fresh[
                 (df_pr_fresh['Codice_Fiscale'].astype(str).str.strip() == str(p_r['Codice_Fiscale']).strip()) &
                 (df_pr_fresh['Data_Visita'].astype(str) == str(visita_prescr))
@@ -3570,19 +3720,19 @@ elif p_r is not None:
 
                     if st.form_submit_button("💾 Aggiungi alla prescrizione", use_container_width=True, type="primary"):
                         if nome_da_usare:
-                            df_i_fresh = data_mod.carica_database(DB_INTEGRATORI, COLS_INTEGR)
+                            df_i_fresh = data_mod.load_table(paths, "DB_INTEGRATORI", COLS_INTEGR)
                             if nome_da_usare not in df_i_fresh['Nome_Integratore'].astype(str).values:
-                                pd.concat([
+                                data_mod.save_table(paths, "DB_INTEGRATORI", pd.concat([
                                     df_i_fresh,
                                     pd.DataFrame([[nome_da_usare, pr_categoria or "", ""]], columns=COLS_INTEGR)
-                                ], ignore_index=True).to_csv(DB_INTEGRATORI, index=False)
+                                ], ignore_index=True))
                                 st.toast(f"💊 '{nome_da_usare}' aggiunto al DB integratori", icon="✅")
                             nuova_riga = pd.DataFrame([[
                                 p_r['Codice_Fiscale'], visita_prescr, data_inizio_pr,
                                 nome_da_usare, pr_posologia or "", pr_note or ""
                             ]], columns=COLS_PRESCR)
-                            df_pr_new = data_mod.carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
-                            pd.concat([df_pr_new, nuova_riga], ignore_index=True).to_csv(DB_PRESCRIZIONI, index=False)
+                            df_pr_new = data_mod.load_table(paths, "DB_PRESCRIZIONI", COLS_PRESCR)
+                            data_mod.save_table(paths, "DB_PRESCRIZIONI", pd.concat([df_pr_new, nuova_riga], ignore_index=True))
                             st.success(f"✅ **{nome_da_usare}** aggiunto alla prescrizione.")
                             st.rerun()
                         else:
@@ -3599,8 +3749,8 @@ elif p_r is not None:
                                 st.warning(f"⚠️ Eliminare **{row_pr['Nome_Integratore']}** dalla prescrizione?")
                                 cpr1, cpr2 = st.columns(2)
                                 if cpr1.button("✅ Sì, elimina", key=f"conf_si_prescr_{idx_pr}", use_container_width=True, type="primary"):
-                                    df_pr_upd = data_mod.carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
-                                    df_pr_upd.drop(idx_pr, errors='ignore').to_csv(DB_PRESCRIZIONI, index=False)
+                                    df_pr_upd = data_mod.load_table(paths, "DB_PRESCRIZIONI", COLS_PRESCR)
+                                    data_mod.save_table(paths, "DB_PRESCRIZIONI", df_pr_upd.drop(idx_pr, errors='ignore'))
                                     st.session_state.confirm_del_prescr = None
                                     st.rerun()
                                 if cpr2.button("❌ Annulla", key=f"conf_no_prescr_{idx_pr}", use_container_width=True):
@@ -3784,7 +3934,7 @@ elif st.session_state.m_modulo:
                     ]
                     new_row = pd.DataFrame([riga], columns=COLS_PAZ)
                     df_p = pd.concat([df_p, new_row], ignore_index=True)
-                    df_p.to_csv(DB_PAZIENTI, index=False)
+                    data_mod.save_table(paths, "DB_PAZIENTI", df_p)
                     st.session_state.p_attivo = df_p.iloc[-1].to_dict()
                     st.success("Paziente creato con successo!")
                     st.rerun()

@@ -1,5 +1,6 @@
-# --- Caricamento e path database (VLEKT PRO) ---
+# --- Caricamento e path database (VLEKT PRO) — SQLite (un DB per utente) ---
 import os
+import sqlite3
 import pandas as pd
 
 from config import (
@@ -11,19 +12,148 @@ from config import (
     COLS_PROT,
 )
 
+SQLITE_DB_NAME = "vlekt.db"
+_TABLE_COLS = {
+    "pazienti": COLS_PAZ,
+    "alimenti": COLS_ALI,
+    "diete": COLS_DIETA,
+    "integratori": COLS_INTEGR,
+    "prescrizioni": COLS_PRESCR,
+    "proteine": COLS_PROT,
+}
+_CSV_FILES = {
+    "pazienti": "database_pazienti.csv",
+    "alimenti": "database_alimenti.csv",
+    "diete": "database_diete.csv",
+    "integratori": "database_integratori.csv",
+    "prescrizioni": "database_prescrizioni.csv",
+    "proteine": "database_proteine.csv",
+}
+
 
 def get_db_paths(user_dir):
+    """Restituisce i path del DB SQLite e i nomi tabella. Ogni utente ha il suo file vlekt.db."""
+    db_path = os.path.join(user_dir, SQLITE_DB_NAME)
     return {
-        "DB_PAZIENTI": os.path.join(user_dir, "database_pazienti.csv"),
-        "DB_ALIMENTI": os.path.join(user_dir, "database_alimenti.csv"),
-        "DB_DIETE": os.path.join(user_dir, "database_diete.csv"),
-        "DB_INTEGRATORI": os.path.join(user_dir, "database_integratori.csv"),
-        "DB_PRESCRIZIONI": os.path.join(user_dir, "database_prescrizioni.csv"),
-        "DB_PROTEINE": os.path.join(user_dir, "database_proteine.csv"),
+        "DB_SQLITE": db_path,
+        "DB_PAZIENTI": "pazienti",
+        "DB_ALIMENTI": "alimenti",
+        "DB_DIETE": "diete",
+        "DB_INTEGRATORI": "integratori",
+        "DB_PRESCRIZIONI": "prescrizioni",
+        "DB_PROTEINE": "proteine",
     }
 
 
-def carica_database(file, colonne):
+def _ensure_sqlite_schema(conn):
+    """Crea le tabelle se non esistono (colonne tutte TEXT per compatibilità)."""
+    for table, cols in _TABLE_COLS.items():
+        col_defs = ", ".join(f'"{c}" TEXT' for c in cols)
+        conn.execute(f'CREATE TABLE IF NOT EXISTS "{table}" ({col_defs})')
+    conn.commit()
+
+
+def _migrate_csv_to_sqlite(user_dir, conn):
+    """Se esistono ancora CSV nella cartella utente, li importa nel DB e poi li rimuove (opzionale)."""
+    for table, cols in _TABLE_COLS.items():
+        csv_path = os.path.join(user_dir, _CSV_FILES[table])
+        if not os.path.exists(csv_path):
+            continue
+        try:
+            df = pd.read_csv(csv_path, dtype=str)
+            for c in cols:
+                if c not in df.columns:
+                    df[c] = ""
+            df = df[cols].fillna("")
+            df.to_sql(table, conn, if_exists="replace", index=False)
+        except Exception:
+            pass
+
+
+def init_user_db(user_dir):
+    """Inizializza il database SQLite per un nuovo utente (tabelle vuote). Usato alla creazione account."""
+    os.makedirs(user_dir, exist_ok=True)
+    paths = get_db_paths(user_dir)
+    conn = sqlite3.connect(paths["DB_SQLITE"])
+    _ensure_sqlite_schema(conn)
+    conn.close()
+
+
+def load_all_databases(user_dir):
+    """Carica tutti i database dall'SQLite dell'utente. Crea il DB e le tabelle se mancano; migra da CSV se presenti."""
+    os.makedirs(user_dir, exist_ok=True)
+    paths = get_db_paths(user_dir)
+    db_path = paths["DB_SQLITE"]
+    created = not os.path.exists(db_path)
+    conn = sqlite3.connect(db_path)
+    _ensure_sqlite_schema(conn)
+    if created:
+        _migrate_csv_to_sqlite(user_dir, conn)
+    conn.close()
+
+    conn = sqlite3.connect(db_path)
+    dfs = {}
+    for table, cols in _TABLE_COLS.items():
+        try:
+            df = pd.read_sql_query(f'SELECT * FROM "{table}"', conn)
+            for c in cols:
+                if c not in df.columns:
+                    df[c] = ""
+            dfs[table] = df[cols].fillna("")
+        except Exception:
+            dfs[table] = pd.DataFrame(columns=cols)
+    conn.close()
+
+    return (
+        dfs["pazienti"],
+        dfs["alimenti"],
+        dfs["diete"],
+        dfs["integratori"],
+        dfs["prescrizioni"],
+        dfs["proteine"],
+        paths,
+    )
+
+
+def load_table(paths, table_key, colonne):
+    """Carica una singola tabella (es. per ricaricare prescrizioni/integratori). table_key = "DB_PRESCRIZIONI" etc."""
+    table_name = paths[table_key]
+    conn = sqlite3.connect(paths["DB_SQLITE"])
+    try:
+        df = pd.read_sql_query(f'SELECT * FROM "{table_name}"', conn)
+        for c in colonne:
+            if c not in df.columns:
+                df[c] = ""
+        return df[colonne].fillna("")
+    except Exception:
+        return pd.DataFrame(columns=colonne)
+    finally:
+        conn.close()
+
+
+def save_table(paths, table_key, df):
+    """Salva un DataFrame nella tabella SQLite. table_key = "DB_PAZIENTI" etc."""
+    table_name = paths[table_key]
+    conn = sqlite3.connect(paths["DB_SQLITE"])
+    try:
+        df = df.astype(str).fillna("")
+        df.to_sql(table_name, conn, if_exists="replace", index=False)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def carica_database(path_or_paths, colonne, table_key=None):
+    """
+    Compatibilità: se riceve (paths, table_key) carica da SQLite.
+    Usato dove si faceva carica_database(DB_PRESCRIZIONI, COLS_PRESCR): ora serve passare paths e "DB_PRESCRIZIONI".
+    """
+    if table_key is not None:
+        return load_table(path_or_paths, table_key, colonne)
+    # Fallback: path come primo arg (legacy)
+    if isinstance(path_or_paths, dict):
+        return load_table(path_or_paths, "DB_PAZIENTI", colonne)
+    file = path_or_paths
     if not os.path.exists(file):
         pd.DataFrame(columns=colonne).to_csv(file, index=False)
     try:
@@ -34,17 +164,6 @@ def carica_database(file, colonne):
         return df[colonne].fillna("")
     except Exception:
         return pd.DataFrame(columns=colonne)
-
-
-def load_all_databases(user_dir):
-    paths = get_db_paths(user_dir)
-    df_p = carica_database(paths["DB_PAZIENTI"], COLS_PAZ)
-    df_a = carica_database(paths["DB_ALIMENTI"], COLS_ALI)
-    df_d = carica_database(paths["DB_DIETE"], COLS_DIETA)
-    df_i = carica_database(paths["DB_INTEGRATORI"], COLS_INTEGR)
-    df_pr = carica_database(paths["DB_PRESCRIZIONI"], COLS_PRESCR)
-    df_prot = carica_database(paths["DB_PROTEINE"], COLS_PROT)
-    return df_p, df_a, df_d, df_i, df_pr, df_prot, paths
 
 
 def parse_prestashop_csv(file_path):

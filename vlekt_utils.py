@@ -19,6 +19,36 @@ def read_update_info(app_dir, default_version="1.0.0"):
     return default_version, ""
 
 
+def read_changelog_for_version(app_dir, version):
+    """
+    Legge CHANGELOG.md nella cartella app_dir e restituisce il testo (markdown)
+    della sezione relativa alla versione indicata (es. "1.0.0").
+    La sezione inizia con "## X.Y.Z" e termina al prossimo "##" o "---" o fine file.
+    """
+    try:
+        path = os.path.join(app_dir, "CHANGELOG.md")
+        if not os.path.exists(path):
+            return ""
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        version = (version or "").strip()
+        if not version:
+            return ""
+        marker = "## " + version
+        idx = content.find(marker)
+        if idx < 0:
+            return ""
+        start = idx + len(marker)
+        end = len(content)
+        for sep in ("\n## ", "\n---"):
+            j = content.find(sep, start)
+            if 0 <= j < end:
+                end = j
+        return content[start:end].strip()
+    except Exception:
+        return ""
+
+
 def to_f(value):
     try:
         if value == "" or value is None or str(value).strip() == "":
