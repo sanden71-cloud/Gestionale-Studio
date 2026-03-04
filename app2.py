@@ -402,6 +402,9 @@ if _auth:
                             # Non fare rerun: così l'utente può leggere e copiare il messaggio (e la password se mostrata)
                         else:
                             st.error(msg_rec)
+                            if os.environ.get("VLEKT_DEV") == "1":
+                                _path, _n = _auth.get_users_file_debug_info()
+                                st.caption(f"🔧 Debug: file utenti = `{_path}` — utenti caricati = {_n}")
                     else:
                         st.warning("Inserisci email o username.")
         st.stop()

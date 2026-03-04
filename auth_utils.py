@@ -31,6 +31,13 @@ def _get_users_file_path() -> Path:
 LICENSE_ENV = "VLEKT_LICENSE_KEY"
 
 
+def get_users_file_debug_info() -> tuple[str, int]:
+    """Per debug: ritorna (percorso_file_utenti, num_utenti)."""
+    p = _get_users_file_path()
+    data = _load_users()
+    return str(p), len(data.get("users", []))
+
+
 def _ensure_dirs():
     """Crea le cartelle necessarie se non esistono."""
     AUTH_DIR.mkdir(parents=True, exist_ok=True)
