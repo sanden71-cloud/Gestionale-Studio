@@ -2,6 +2,8 @@
 """
 Modulo autenticazione e gestione utenti per VLEKT PRO.
 Gestisce login, utenti, database per utente, protezione copie.
+Con VLEKT_SECRET_KEY impostata: utenti e config sono salvati cifrati (users.enc, config.enc)
+e possono essere committati su Git per sincronizzare locale ↔ deploy.
 """
 from __future__ import annotations
 import os
@@ -9,16 +11,49 @@ import json
 import hashlib
 import secrets
 import unicodedata
+import base64
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
 AUTH_DIR = APP_DIR / "auth"
 DATA_DIR = APP_DIR / "data"
 CONFIG_FILE = AUTH_DIR / "config.json"
+USERS_ENC = AUTH_DIR / "users.enc"
+CONFIG_ENC = AUTH_DIR / "config.enc"
+
+# Chiave per sincronizzazione sicura locale ↔ deploy (crittografia utenti e config)
+SECRET_KEY_ENV = "VLEKT_SECRET_KEY"
+# Chiave/licenza per protezione copie (impostare in config o variabile d'ambiente)
+LICENSE_ENV = "VLEKT_LICENSE_KEY"
+
+
+def _sync_key_set() -> bool:
+    """True se è impostata la chiave per sync cifrato (utenti e config in .enc)."""
+    return bool((os.environ.get(SECRET_KEY_ENV) or "").strip())
+
+
+def _get_fernet():
+    """Restituisce istanza Fernet da VLEKT_SECRET_KEY (passphrase derivata con PBKDF2), o None."""
+    key_str = (os.environ.get(SECRET_KEY_ENV) or "").strip()
+    if not key_str:
+        return None
+    try:
+        from cryptography.fernet import Fernet
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        from cryptography.hazmat.primitives import hashes
+        salt = b"vlekt_auth_sync_v1"
+        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000)
+        key_bytes = kdf.derive(key_str.encode("utf-8"))
+        fernet_key = base64.urlsafe_b64encode(key_bytes)
+        return Fernet(fernet_key)
+    except Exception:
+        return None
 
 
 def _get_users_file_path() -> Path:
-    """Percorso del file utenti: prima quello accanto al modulo, poi auth/users.json nella cwd (per avvio da .command)."""
+    """Percorso del file utenti: se sync attivo → users.enc, altrimenti users.json (modulo o cwd)."""
+    if _sync_key_set():
+        return USERS_ENC
     default = AUTH_DIR / "users.json"
     if default.exists():
         return default
@@ -26,9 +61,6 @@ def _get_users_file_path() -> Path:
     if cwd_auth.exists():
         return cwd_auth
     return default
-
-# Chiave/licenza per protezione copie (impostare in config.json o variabile d'ambiente)
-LICENSE_ENV = "VLEKT_LICENSE_KEY"
 
 
 def get_users_file_debug_info() -> tuple[str, int]:
@@ -62,9 +94,37 @@ def _verify_password(password: str, stored: str) -> bool:
 
 
 def _load_users() -> dict:
-    """Carica il file utenti."""
+    """Carica il file utenti (da .enc se sync attivo, altrimenti da .json)."""
     _ensure_dirs()
+    if _sync_key_set():
+        fernet = _get_fernet()
+        if fernet and USERS_ENC.exists():
+            try:
+                with open(USERS_ENC, "rb") as f:
+                    dec = fernet.decrypt(f.read())
+                return json.loads(dec.decode("utf-8"))
+            except Exception:
+                pass
+        # Migrazione: se esiste users.json ma non users.enc, cifra e salva .enc
+        legacy = AUTH_DIR / "users.json"
+        if fernet and legacy.exists():
+            try:
+                with open(legacy, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
+                with open(USERS_ENC, "wb") as f:
+                    f.write(fernet.encrypt(raw))
+                return data
+            except Exception:
+                pass
+        if USERS_ENC.exists():
+            return {"users": []}
+        # Chiave impostata ma file .enc assente o fernet non disponibile: prova legacy users.json
     users_file = _get_users_file_path()
+    if _sync_key_set():
+        legacy = AUTH_DIR / "users.json"
+        if legacy.exists():
+            users_file = legacy
     if not users_file.exists():
         return {"users": []}
     try:
@@ -75,8 +135,18 @@ def _load_users() -> dict:
 
 
 def _save_users(data: dict) -> bool:
-    """Salva il file utenti."""
+    """Salva il file utenti (in .enc cifrato se sync attivo, altrimenti in .json)."""
     _ensure_dirs()
+    if _sync_key_set():
+        fernet = _get_fernet()
+        if fernet:
+            try:
+                raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
+                with open(USERS_ENC, "wb") as f:
+                    f.write(fernet.encrypt(raw))
+                return True
+            except Exception:
+                return False
     users_file = _get_users_file_path()
     users_file.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -256,13 +326,7 @@ def _send_email(to: str, subject: str, body: str) -> tuple[bool, str]:
     to = (to or "").strip()
     if not to or "@" not in to:
         return False, "Indirizzo email non valido."
-    cfg = {}
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-        except Exception:
-            pass
+    cfg = get_config()
     host = (cfg.get("smtp_host") or os.environ.get("VLEKT_SMTP_HOST") or "").strip()
     port = int(cfg.get("smtp_port") or os.environ.get("VLEKT_SMTP_PORT") or 587)
     user = (cfg.get("smtp_user") or os.environ.get("VLEKT_SMTP_USER") or "").strip()
@@ -387,16 +451,10 @@ def check_license() -> tuple[bool, str]:
     if key and len(key) >= 8:
         return True, ""
 
-    # Controllo 2: file config nella cartella auth (non in repository)
-    _ensure_dirs()
-    if CONFIG_FILE.exists():
-        try:
-            with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-                cfg = json.load(f)
-            if cfg.get("license_key") and len(str(cfg.get("license_key", ""))) >= 8:
-                return True, ""
-        except Exception:
-            pass
+    # Controllo 2: config (da config.enc se sync attivo, altrimenti config.json)
+    cfg = get_config()
+    if cfg.get("license_key") and len(str(cfg.get("license_key", ""))) >= 8:
+        return True, ""
 
     # Controllo 3: VLEKT_DEV=1 = sviluppo locale, salta controllo
     if os.environ.get("VLEKT_DEV") == "1":
@@ -407,7 +465,7 @@ def check_license() -> tuple[bool, str]:
 
 
 def get_config() -> dict:
-    """Legge auth/config.json. Ritorna un dict con license_key e tutti i campi SMTP (valori vuoti se mancanti)."""
+    """Legge config (da config.enc se sync attivo, altrimenti config.json). Ritorna dict con license_key e SMTP."""
     _ensure_dirs()
     defaults = {
         "license_key": "",
@@ -418,6 +476,33 @@ def get_config() -> dict:
         "smtp_use_tls": True,
         "from_email": "",
     }
+    if _sync_key_set():
+        fernet = _get_fernet()
+        if fernet and CONFIG_ENC.exists():
+            try:
+                with open(CONFIG_ENC, "rb") as f:
+                    dec = fernet.decrypt(f.read())
+                cfg = json.loads(dec.decode("utf-8"))
+                for k in defaults:
+                    if k not in cfg:
+                        cfg[k] = defaults[k]
+                return cfg
+            except Exception:
+                pass
+        # Migrazione: config.json → config.enc
+        if fernet and CONFIG_FILE.exists():
+            try:
+                with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                for k in defaults:
+                    if k not in cfg:
+                        cfg[k] = defaults[k]
+                raw = json.dumps({k: cfg.get(k) for k in defaults}, ensure_ascii=False).encode("utf-8")
+                with open(CONFIG_ENC, "wb") as f:
+                    f.write(fernet.encrypt(raw))
+                return cfg
+            except Exception:
+                pass
     if not CONFIG_FILE.exists():
         return defaults
     try:
@@ -432,7 +517,7 @@ def get_config() -> dict:
 
 
 def save_config(config_dict: dict) -> tuple[bool, str]:
-    """Salva auth/config.json con i valori forniti. Solo chiavi note (license_key, smtp_*)."""
+    """Salva config (in config.enc cifrato se sync attivo, altrimenti config.json)."""
     _ensure_dirs()
     allowed = {"license_key", "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_use_tls", "from_email"}
     out = {k: config_dict.get(k) for k in allowed if k in config_dict}
@@ -443,6 +528,16 @@ def save_config(config_dict: dict) -> tuple[bool, str]:
             out["smtp_port"] = 587
     if "smtp_use_tls" in out:
         out["smtp_use_tls"] = bool(out["smtp_use_tls"])
+    if _sync_key_set():
+        fernet = _get_fernet()
+        if fernet:
+            try:
+                raw = json.dumps(out, ensure_ascii=False).encode("utf-8")
+                with open(CONFIG_ENC, "wb") as f:
+                    f.write(fernet.encrypt(raw))
+                return True, "Configurazione salvata."
+            except Exception as e:
+                return False, str(e)
     try:
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(out, f, indent=2, ensure_ascii=False)

@@ -1,13 +1,29 @@
 VLEKT PRO - Autenticazione e Licenza
 ====================================
 
+SYNC LOCALE ↔ DEPLOY (utenti e config uguali ovunque):
+------------------------------------------------------
+Imposta la stessa passphrase in locale e in deploy (es. Streamlit Cloud → Secrets):
+  VLEKT_SECRET_KEY = una passphrase segreta (es. "MiaPassphraseSegreta123")
+
+- In locale: aggiungi VLEKT_SECRET_KEY al .command o a ~/.zshrc.
+- In deploy: aggiungi VLEKT_SECRET_KEY nei Secrets dell'app.
+
+Con VLEKT_SECRET_KEY attiva:
+  • Utenti e config sono salvati cifrati in auth/users.enc e auth/config.enc.
+  • Puoi committare e pushare users.enc e config.enc su GitHub: saranno gli stessi in locale e online.
+  • Crea/modifica utenti e config in un ambiente, fai commit e push; nell'altro fai pull e riavvia.
+- La passphrase non va mai committata: solo nei Secrets / variabili d'ambiente.
+- Senza VLEKT_SECRET_KEY: si usano auth/users.json e auth/config.json (ignorati da Git, solo locale).
+
 SVILUPPO LOCALE:
 - Imposta VLEKT_DEV=1 (già in Studio_AD.command) per saltare il controllo licenza.
 - Primo accesso: utente "admin" / password "Admin123!" — cambiala subito.
 
 PRODUZIONE (deploy online):
 1. Imposta la variabile d'ambiente VLEKT_LICENSE_KEY con la tua chiave (es. su Streamlit Cloud: Secrets).
-2. Oppure crea config.json qui con: {"license_key": "LA_TUA_CHIAVE"}
+2. Oppure (senza sync) crea config.json qui con: {"license_key": "LA_TUA_CHIAVE"}
+   Con sync (VLEKT_SECRET_KEY) la licenza è in config.enc.
 
 UTENTI:
 - I dati di ogni utente sono in data/{username}/

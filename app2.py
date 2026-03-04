@@ -1464,6 +1464,8 @@ if st.session_state.show_utility:
         st.markdown("---")
         # Configurazione licenza e SMTP (solo admin)
         with st.expander("⚙️ Configurazione (licenza e SMTP)", expanded=True):
+            if os.environ.get("VLEKT_SECRET_KEY", "").strip():
+                st.info("🔄 **Sync attivo:** utenti e config sono salvati cifrati (users.enc, config.enc). Puoi committarli su Git per avere gli stessi dati in locale e in deploy.")
             _cfg = _auth.get_config()
             with st.form("admin_config_form"):
                 st.markdown("**Licenza**")
