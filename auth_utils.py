@@ -14,8 +14,18 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parent
 AUTH_DIR = APP_DIR / "auth"
 DATA_DIR = APP_DIR / "data"
-USERS_FILE = AUTH_DIR / "users.json"
 CONFIG_FILE = AUTH_DIR / "config.json"
+
+
+def _get_users_file_path() -> Path:
+    """Percorso del file utenti: prima quello accanto al modulo, poi auth/users.json nella cwd (per avvio da .command)."""
+    default = AUTH_DIR / "users.json"
+    if default.exists():
+        return default
+    cwd_auth = Path.cwd() / "auth" / "users.json"
+    if cwd_auth.exists():
+        return cwd_auth
+    return default
 
 # Chiave/licenza per protezione copie (impostare in config.json o variabile d'ambiente)
 LICENSE_ENV = "VLEKT_LICENSE_KEY"
@@ -47,10 +57,11 @@ def _verify_password(password: str, stored: str) -> bool:
 def _load_users() -> dict:
     """Carica il file utenti."""
     _ensure_dirs()
-    if not USERS_FILE.exists():
+    users_file = _get_users_file_path()
+    if not users_file.exists():
         return {"users": []}
     try:
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
+        with open(users_file, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return {"users": []}
@@ -59,8 +70,10 @@ def _load_users() -> dict:
 def _save_users(data: dict) -> bool:
     """Salva il file utenti."""
     _ensure_dirs()
+    users_file = _get_users_file_path()
+    users_file.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with open(USERS_FILE, "w", encoding="utf-8") as f:
+        with open(users_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         return True
     except Exception:
@@ -211,7 +224,13 @@ def find_user_by_email_or_username(key: str):
     if not key_norm:
         return None
     data = _load_users()
-    for u in data.get("users", []):
+    users_list = data.get("users", [])
+    if os.environ.get("VLEKT_DEV") == "1":
+        _uf = _get_users_file_path()
+        print(f"[VLEKT_DEV] Recupero password: file utenti={_uf}, esistente={_uf.exists()}, num_utenti={len(users_list)}")
+        for u in users_list:
+            print(f"  - username={u.get('username')!r} email={u.get('email')!r}")
+    for u in users_list:
         uname = _normalize_key(u.get("username") or "")
         uemail = _normalize_key(u.get("email") or "")
         if uname == key_norm or uemail == key_norm:
