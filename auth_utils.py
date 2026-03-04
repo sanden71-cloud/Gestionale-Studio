@@ -8,6 +8,7 @@ import os
 import json
 import hashlib
 import secrets
+import unicodedata
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent
@@ -197,19 +198,26 @@ def reset_admin_password_to_default() -> tuple[bool, str]:
     return False, "Utente admin non trovato."
 
 
+def _normalize_key(s: str) -> str:
+    """Normalizza una stringa per il confronto: strip, lowercase, NFKC (evita caratteri invisibili)."""
+    if not s:
+        return ""
+    return unicodedata.normalize("NFKC", str(s).strip().lower())
+
+
 def find_user_by_email_or_username(key: str):
     """Cerca un utente per email o username. Ritorna il dict utente o None."""
-    if not key or not str(key).strip():
+    key_norm = _normalize_key(key)
+    if not key_norm:
         return None
-    key = str(key).strip().lower()
     data = _load_users()
     for u in data.get("users", []):
-        uname = (u.get("username") or "").strip().lower()
-        uemail = (u.get("email") or "").strip().lower()
-        if uname == key or uemail == key:
+        uname = _normalize_key(u.get("username") or "")
+        uemail = _normalize_key(u.get("email") or "")
+        if uname == key_norm or uemail == key_norm:
             return u
         # Se hanno inserito un'email, prova anche a matchare lo username con la parte prima della @
-        if "@" in key and uname == key.split("@")[0]:
+        if "@" in key_norm and uname == key_norm.split("@")[0]:
             return u
     return None
 
