@@ -32,6 +32,18 @@ try:
 except ImportError:
     st_searchbox = None
 
+from config import (
+    VERSION, APP_NAME, CHECK_UPDATE_URL,
+    LISTA_PASTI_UOMO, LISTA_PASTI_DONNA, LISTA_PASTI, ORDINE_PASTI, lista_laf,
+    COLS_PAZ, COLS_ALI, COLS_DIETA, COLS_INTEGR, COLS_PRESCR, COLS_PROT,
+    PDF_PIANI, PDF_NOME_CFG,
+)
+from utils import (
+    to_f, calcola_eta, calcola_eta_anni_mesi, calcola_info_visite, _norm_data_visita,
+    calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, check_update_available,
+)
+import data as data_mod
+
 # --- 1. CONFIGURAZIONE E SETUP ---
 try:
     from codicefiscale import codicefiscale
@@ -39,98 +51,6 @@ except ImportError:
     st.error("Errore: Libreria mancante. Installa con: pip3 install codicefiscale")
 
 st.set_page_config(page_title="VLEKT PRO - Gestionale Nutrizionale Integrato", layout="wide", page_icon="🥑")
-
-# --- FUNZIONI MEDICO-MATEMATICHE ---
-def to_f(value):
-    try:
-        if value == "" or value is None or str(value).strip() == "": return 0.0
-        return float(str(value).replace(',', '.'))
-    except: return 0.0
-
-def calcola_eta(data_nascita_str):
-    try:
-        g, m, a = map(int, data_nascita_str.split('/'))
-        nascita = date(a, m, g)
-        oggi = date.today()
-        return oggi.year - nascita.year - ((oggi.month, oggi.day) < (nascita.month, nascita.day))
-    except:
-        return 30
-
-def calcola_eta_anni_mesi(data_nascita_str):
-    """Restituisce (anni, mesi) per visualizzazione tipo '43 anni e 10 mesi'."""
-    try:
-        g, m, a = map(int, data_nascita_str.split('/'))
-        nascita = date(a, m, g)
-        oggi = date.today()
-        anni = oggi.year - nascita.year - ((oggi.month, oggi.day) < (nascita.month, nascita.day))
-        mesi = (oggi.month - nascita.month) + (oggi.day - nascita.day) / 31.0
-        if mesi < 0:
-            anni -= 1
-            mesi += 12
-        mesi = int(round(mesi)) % 12
-        return anni, mesi
-    except:
-        return 30, 0
-
-def calcola_info_visite(st_p_ord):
-    """Da DataFrame visite ordinate per data: ultima_data, giorni_da_ultima, n_visite, intervallo_medio_giorni."""
-    if st_p_ord is None or st_p_ord.empty:
-        return None, 0, 0, 0
-    n_visite = len(st_p_ord)
-    ultima_str = st_p_ord.iloc[-1]['Data_Visita']
-    try:
-        gg, mm, aa = map(int, ultima_str.split('/'))
-        ultima_data = date(aa, mm, gg)
-        giorni_da_ultima = (date.today() - ultima_data).days
-    except Exception:
-        ultima_data = None
-        giorni_da_ultima = 0
-    intervallo_medio = 0
-    if n_visite >= 2:
-        date_visite = []
-        for _, r in st_p_ord.iterrows():
-            try:
-                g, m, a = map(int, str(r['Data_Visita']).split('/'))
-                date_visite.append(date(a, m, g))
-            except Exception:
-                pass
-        date_visite.sort()
-        diff_giorni = [(date_visite[i+1] - date_visite[i]).days for i in range(len(date_visite)-1)]
-        intervallo_medio = int(round(sum(diff_giorni) / len(diff_giorni))) if diff_giorni else 0
-    return ultima_str, giorni_da_ultima, n_visite, intervallo_medio
-
-def _norm_data_visita(s):
-    """Normalizza una data in formato d/m/yyyy, dd/mm/yyyy o yyyy-mm-dd in dd/mm/yyyy per confronti robusti."""
-    try:
-        s = str(s).strip()
-        if not s or s == 'nan':
-            return ''
-        # Formato ISO (yyyy-mm-dd o yyyy-m-d)
-        if '-' in s and '/' not in s:
-            parts = s.split('-')
-            if len(parts) == 3:
-                a, m, g = parts[0], parts[1], parts[2]
-                return f"{int(g):02d}/{int(m):02d}/{int(a)}"
-        # Formato italiano (d/m/yyyy o dd/mm/yyyy)
-        parts = s.split('/')
-        if len(parts) == 3:
-            g, m, a = int(parts[0]), int(parts[1]), int(parts[2])
-            return f"{g:02d}/{m:02d}/{a}"
-    except Exception:
-        pass
-    return str(s).strip()
-
-def calcola_stato_bmi(bmi):
-    if bmi < 18.5: return "Sottopeso", "#3498db" 
-    elif bmi < 25.0: return "Normopeso", "#2ecc71" 
-    elif bmi < 30.0: return "Sovrappeso", "#f1c40f" 
-    elif bmi < 35.0: return "Obesità 1° Grado", "#e67e22" 
-    elif bmi < 40.0: return "Obesità 2° Grado", "#e74c3c" 
-    else: return "Obesità 3° Grado", "#8e44ad" 
-
-def calcola_bmr(peso, altezza, eta, sesso):
-    if sesso == 'M': return (10 * peso) + (6.25 * altezza) - (5 * eta) + 5
-    else: return (10 * peso) + (6.25 * altezza) - (5 * eta) - 161
 
 # --- 1.5 INIEZIONE CSS PER GRAFICA A "SCHEDE" (GARANTITA AL 100%) ---
 st.markdown("""
@@ -454,13 +374,14 @@ else:
     _user_dir = os.path.dirname(os.path.abspath(__file__))
     _is_admin = False
 
-# --- 2. COSTANTI E DATABASE ---
-DB_PAZIENTI = os.path.join(_user_dir, 'database_pazienti.csv')
-DB_ALIMENTI = os.path.join(_user_dir, 'database_alimenti.csv')
-DB_DIETE = os.path.join(_user_dir, 'database_diete.csv')
-DB_INTEGRATORI = os.path.join(_user_dir, 'database_integratori.csv')
-DB_PRESCRIZIONI = os.path.join(_user_dir, 'database_prescrizioni.csv')
-DB_PROTEINE = os.path.join(_user_dir, 'database_proteine.csv')
+# --- 2. DATABASE (path + migrazione + caricamento) ---
+paths = data_mod.get_db_paths(_user_dir)
+DB_PAZIENTI = paths["DB_PAZIENTI"]
+DB_ALIMENTI = paths["DB_ALIMENTI"]
+DB_DIETE = paths["DB_DIETE"]
+DB_INTEGRATORI = paths["DB_INTEGRATORI"]
+DB_PRESCRIZIONI = paths["DB_PRESCRIZIONI"]
+DB_PROTEINE = paths["DB_PROTEINE"]
 
 # Migrazione: se admin e data/admin vuoto ma esistono CSV nella root app, copiali
 if _auth and _is_admin and _user_dir != os.path.dirname(os.path.abspath(__file__)):
@@ -475,219 +396,10 @@ if _auth and _is_admin and _user_dir != os.path.dirname(os.path.abspath(__file__
             if os.path.exists(_src):
                 shutil.copy2(_src, _dst)
 
-LISTA_PASTI_UOMO   = ['Colazione', 'Spuntino Mattina', 'Pranzo', 'Merenda', 'Cena', 'Dopo Cena']
-LISTA_PASTI_DONNA  = ['Colazione', 'Spuntino/Merenda', 'Pranzo', 'Cena']
-LISTA_PASTI        = LISTA_PASTI_UOMO  # default per compatibilità ordinamento
-ORDINE_PASTI       = {p: i for i, p in enumerate(LISTA_PASTI_UOMO + ['Spuntino/Merenda'])}
-
-# Definizione Colonne
-COLS_PAZ = [
-    'Data_Visita', 'Nome', 'Cognome', 'Codice_Fiscale', 'Data_Nascita', 
-    'Luogo_Nascita', 'Indirizzo', 'Sesso', 'Cellulare', 'Email', 'Altezza', 'Peso', 'BMI', 
-    'Addome', 'Fianchi', 'Torace', 'Polso', 
-    'Analisi_Cliniche', 'Farmaci', 'Note', 'LAF', 'Peso_Target',
-    # Circonferenze
-    'Circ_Polso_Dx', 'Circ_Polso_Sx',
-    'Circ_Avambraccio_Dx', 'Circ_Avambraccio_Sx',
-    'Circ_Braccio_Dx', 'Circ_Braccio_Sx',
-    'Circ_Spalle', 'Circ_Torace_Ant', 'Circ_Vita', 'Circ_Addome_Ant', 'Circ_Fianchi_Ant',
-    'Circ_Coscia_Prox_Dx', 'Circ_Coscia_Prox_Sx',
-    'Circ_Coscia_Med_Dx', 'Circ_Coscia_Med_Sx',
-    'Circ_Coscia_Dist_Dx', 'Circ_Coscia_Dist_Sx',
-    'Circ_Polpaccio_Dx', 'Circ_Polpaccio_Sx',
-    'Circ_Caviglia_Dx', 'Circ_Caviglia_Sx',
-    # Pliche
-    'Plica_Avambraccio', 'Plica_Bicipitale', 'Plica_Tricipitale', 'Plica_Ascellare',
-    'Plica_Pettorale', 'Plica_Sottoscapolare', 'Plica_Addominale', 'Plica_Soprailiaca',
-    'Plica_Coscia_Med', 'Plica_Soprapatellare', 'Plica_Polpaccio_Med', 'Plica_Sopraspinale',
-    # Diametri ossei
-    'Diam_Polso', 'Diam_Gomito', 'Diam_Biacromiale',
-    'Diam_Toracico', 'Diam_Bicrestale', 'Diam_Addominale_Sag',
-    'Diam_Bitrocanterio', 'Diam_Ginocchio', 'Diam_Caviglia',
-    # Note antropometria
-    'Note_Antropometria',
-]
-COLS_ALI = ['Alimento', 'Kcal', 'Carbo_Netti', 'Prot', 'Grassi', 'Porzioni_Confezione']
-COLS_DIETA = ['Codice_Fiscale', 'Data_Visita', 'Step', 'Giorni', 'Pasto', 'Alimento', 'Quantita', 'Kcal_Tot', 'Carbo_Tot', 'Prot_Tot', 'Grassi_Tot']
-COLS_INTEGR = ['Nome_Integratore', 'Categoria', 'Descrizione']
-COLS_PRESCR = ['Codice_Fiscale', 'Data_Visita', 'Data_Inizio', 'Nome_Integratore', 'Posologia', 'Note_Prescrizione']
-COLS_PROT = ['Nome', 'Categoria', 'Grammi_Porzione', 'Kcal', 'Prot', 'Grassi', 'Carbo_Netti', 'Note']
-
-# --- COSTANTI GLOBALI ---
-lista_laf = ["1.2 - Sedentario", "1.375 - Leggermente Attivo", "1.55 - Moderatamente Attivo", "1.725 - Molto Attivo", "1.9 - Estremamente Attivo"]
-
-def carica_database(file, colonne):
-    if not os.path.exists(file):
-        pd.DataFrame(columns=colonne).to_csv(file, index=False)
-    try:
-        df = pd.read_csv(file, dtype=str)
-        for c in colonne:
-            if c not in df.columns: df[c] = ""
-        return df[colonne].fillna("")
-    except:
-        return pd.DataFrame(columns=colonne)
-
-df_p = carica_database(DB_PAZIENTI, COLS_PAZ)
-df_a = carica_database(DB_ALIMENTI, COLS_ALI)
-df_d = carica_database(DB_DIETE, COLS_DIETA)
-df_i = carica_database(DB_INTEGRATORI, COLS_INTEGR)
-df_pr = carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
-df_prot = carica_database(DB_PROTEINE, COLS_PROT)
+df_p, df_a, df_d, df_i, df_pr, df_prot, _ = data_mod.load_all_databases(_user_dir)
 
 
-def parse_prestashop_csv(file_path):
-    """
-    Legge un CSV export PrestaShop (articoli) e estrae i dati nutrizionali
-    dalla tabella HTML nella colonna Descrizione.
-    Ritorna lista di dict con chiavi COLS_ALI.
-    """
-    import csv
-    import re
-    from html.parser import HTMLParser
-
-    class TableParser(HTMLParser):
-        def __init__(self):
-            super().__init__()
-            self.rows = []
-            self.cur = []
-            self.in_cell = False
-        def handle_starttag(self, tag, attrs):
-            if tag in ('td', 'th'):
-                self.in_cell = True
-                self.cur.append('')
-        def handle_endtag(self, tag):
-            if tag in ('td', 'th'):
-                self.in_cell = False
-            if tag == 'tr' and self.cur:
-                self.rows.append([x.strip().replace('\xa0', ' ') for x in self.cur])
-                self.cur = []
-        def handle_data(self, data):
-            if self.in_cell and self.cur:
-                self.cur[-1] += data
-
-    def estrai_nutrizionali(desc_html):
-        """Estrae Kcal, Carbo, Prot, Grassi dalla tabella nutrizionale HTML."""
-        if not desc_html or '<table' not in desc_html:
-            return {}
-        # Cerca la tabella che contiene "Energia" o "Kcal" (non sempre è la prima; a volte c'è tabella ingredienti prima)
-        pos = 0
-        tbl_html = None
-        while True:
-            start = desc_html.find('<table', pos)
-            if start < 0:
-                break
-            end = desc_html.find('</table>', start) + len('</table>')
-            blocco = desc_html[start:end]
-            if 'energia' in blocco.lower() or 'kcal' in blocco.lower() or 'valori nutrizionali' in blocco.lower():
-                tbl_html = blocco
-                break
-            pos = end
-        if not tbl_html:
-            return {}
-        p = TableParser()
-        try:
-            p.feed(tbl_html)
-        except Exception:
-            return {}
-        vals = {}
-        for row in p.rows:
-            if len(row) < 3:
-                continue
-            label = (row[0] or '').lower()
-            col3 = row[2]  # valori per porzione
-            if 'energia' in label:
-                m = re.search(r'(\d+)\s*[kK]cal', col3)
-                vals['Kcal'] = m.group(1) if m else ''
-            elif 'grassi' in label:
-                m = re.search(r'([\d,]+)\s*g', col3)
-                vals['Grassi'] = (m.group(1).replace(',', '.') if m else '')
-            elif 'carboidrati' in label:
-                m = re.search(r'([\d,]+)\s*g', col3)
-                vals['Carbo_Netti'] = (m.group(1).replace(',', '.') if m else '')
-            elif 'proteine' in label:
-                m = re.search(r'([\d,]+)\s*g', col3)
-                vals['Prot'] = (m.group(1).replace(',', '.') if m else '')
-        return vals
-
-    def estrai_porzioni(nome):
-        """Estrae numero porzioni da nome (es. 'Confezione 5 porzioni' -> 5)."""
-        m = re.search(r'(\d+)\s*(?:porzioni|barrette|bustine?|pezzi)', nome or '', re.I)
-        return m.group(1) if m else ''
-
-    def pulisci_nome(nome):
-        """Rimuove suffissi come •LINEAPROTEICA dalla fine."""
-        if not nome:
-            return ''
-        n = re.sub(r'\s*[•·]\s*LINEAPROTEICA\s*$', '', nome, flags=re.I)
-        return n.strip()
-
-    risultato = []
-    try:
-        with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
-            r = csv.reader(f, delimiter=';', quotechar='"')
-            headers = next(r, [])
-            # Indici colonne PrestaShop tipici (Nome=7, Descrizione HTML=9)
-            idx_nome = idx_desc = -1
-            for i, h in enumerate(headers):
-                hc = str(h).strip().lower()
-                if hc == 'nome':
-                    idx_nome = i
-                elif idx_nome < 0 and 'nome' in hc:
-                    idx_nome = i
-                if 'descrizione' in hc and 'html' in hc and 'breve' not in hc:
-                    idx_desc = i
-            if idx_nome < 0:
-                idx_nome = 6
-            if idx_desc < 0:
-                idx_desc = 8
-            seen = set()
-            for row in r:
-                if len(row) <= max(idx_nome, idx_desc):
-                    continue
-                nome_raw = row[idx_nome].strip()
-                nome = pulisci_nome(nome_raw)
-                if not nome or nome in seen:
-                    continue
-                seen.add(nome)
-                nutr = estrai_nutrizionali(row[idx_desc] if idx_desc < len(row) else '')
-                porz = estrai_porzioni(nome_raw) or estrai_porzioni(row[idx_desc] if idx_desc < len(row) else '')
-                # Escludi prodotti senza valori nutrizionali (integratori, servizi, ecc.)
-                kc, cb, pt, gr = nutr.get('Kcal', ''), nutr.get('Carbo_Netti', ''), nutr.get('Prot', ''), nutr.get('Grassi', '')
-                if not (kc or cb or pt or gr):
-                    continue
-                risultato.append({
-                    'Alimento': nome,
-                    'Kcal': kc,
-                    'Carbo_Netti': cb,
-                    'Prot': pt,
-                    'Grassi': gr,
-                    'Porzioni_Confezione': porz
-                })
-    except Exception as e:
-        raise e
-    return risultato
-
-
-# --- 3. FUNZIONI PDF ---
-
-# Percorsi template piani dieta (da copiare nella stessa cartella dell'app)
-PDF_PIANI = {
-    ('F', 1): 'Donna_4_pasti_Fase_1_Step_1.pdf',
-    ('F', 2): 'Donna_3_pasti_Fase_1_Step_2.pdf',
-    ('M', 1): 'Uomo_5_pasti_Fase_1_Step_1.pdf',
-    ('M', 2): 'Uomo_4_Pasti_Fase_1_Step_2.pdf',
-}
-
-# Coordinate zona nome per ogni template
-# y_rl = coordinata Y in ReportLab (origine in basso) = 842 - top_pdfplumber
-# Il testo originale è ~18pt, usiamo 13pt per non sovrastare il layout
-PDF_NOME_CFG = {
-    ('F', 1): {'x': 54, 'y_cover_top': 131, 'y_cover_bot': 150},  # top=131, bottom=149
-    ('F', 2): {'x': 54, 'y_cover_top': 138, 'y_cover_bot': 158},  # top=138, bottom=156
-    ('M', 1): {'x': 54, 'y_cover_top': 129, 'y_cover_bot': 149},  # top=129, bottom=147
-    ('M', 2): {'x': 54, 'y_cover_top': 137, 'y_cover_bot': 160},  # top=137, bottom=159
-}
-
+# --- 3. FUNZIONI PDF (restano in app2; usano config e utils) ---
 def genera_piano_dieta_pdf(sesso, step, cognome, nome, data_visita):
     """
     Prende il PDF template corretto (per sesso e step),
@@ -867,10 +579,6 @@ def genera_pdf_visita_paziente(p_info, visita, storico):
     - Grafico andamenti antropometrici (solo misure con piu di 1 rilevazione)
     - Analisi cliniche / farmaci / note
     """
-    def safe(val, default="-"):
-        v = str(val).strip()
-        return v if v not in ('', 'nan', 'None') else default
-
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
 
@@ -1388,32 +1096,7 @@ def genera_pdf_report(p_info, storico, dieta, scorte_df=None, data_visita="N/D")
 
     return bytes(pdf.output())
 
-def colora_pasti(row):
-    pasto = row['Pasto']
-    if pasto == 'Colazione': color = '#FFF3CD'
-    elif pasto in ('Spuntino Mattina', 'Spuntino/Merenda'): color = '#FFE6CC'
-    elif pasto == 'Pranzo': color = '#D4EDDA'
-    elif pasto == 'Merenda': color = '#D1ECF1'
-    elif pasto == 'Cena': color = '#E2E3E5'
-    elif pasto == 'Dopo Cena': color = '#E8DAEF'
-    else: color = '#FFFFFF'
-    return [f'background-color: {color}'] * len(row)
-
-
 # --- FUNZIONE FORM ANTROPOMETRICO ---
-def _v(d, key, default=0.0):
-    """Legge un valore da un dict/Series, restituisce default se assente/nan."""
-    if d is None: return default
-    try:
-        if isinstance(d, dict):
-            val = d.get(key, default)
-        else:
-            val = d[key] if key in d.index else default
-        r = to_f(val)
-        return r if r != 0.0 else default
-    except:
-        return default
-
 def form_antropometria(prefix, d_form=None):
     """Sezione espandibile con tutti i campi antropometrici. Restituisce dict."""
     vals = {}
@@ -1672,6 +1355,7 @@ def _render_navbar():
     <div class="vlekt-navbar">
         <div class="vlekt-navbar-left">
             <span class="vlekt-navbar-logo">VLEKT <span>PRO</span></span>
+            <span style="font-size:11px;color:#94a3b8;font-weight:500;">v{VERSION}</span>
             <span class="vlekt-breadcrumb">{bread}</span>
         </div>
     </div>
@@ -2017,6 +1701,22 @@ if st.session_state.show_utility:
             st.success("✅ Nessun duplicato trovato.")
 
     st.markdown("---")
+
+    # ── 6. CONTROLLA AGGIORNAMENTI ──
+    st.markdown("#### 🔄 Controlla aggiornamenti")
+    if not (CHECK_UPDATE_URL and str(CHECK_UPDATE_URL).strip()):
+        st.info("Per abilitare il controllo: imposta **CHECK_UPDATE_URL** in `config.py` con l’URL che restituisce la versione più recente (solo testo, es. `1.1.0`).")
+    else:
+        if st.button("Controlla aggiornamenti", key="btn_check_update"):
+            status, value = check_update_available(VERSION, CHECK_UPDATE_URL)
+            if status == "new":
+                st.success(f"✅ Disponibile una nuova versione: **{value}**. Controlla come scaricare l’aggiornamento (chiavetta, link, ecc.).")
+            elif status == "current":
+                st.info(f"Sei aggiornato: versione **{VERSION}**.")
+            else:
+                st.warning(f"Impossibile verificare: {value}")
+
+    st.markdown("---")
     if _auth and _is_admin:
         st.markdown("#### ⚙️ Amministrazione")
         if st.button("👥 Amministrazione utenti", type="primary", key="btn_admin_from_utility"):
@@ -2109,7 +1809,7 @@ if st.session_state.show_db_alimenti:
                         tmp.write(uploaded.getvalue())
                         tmp_path = tmp.name
                     try:
-                        prodotti = parse_prestashop_csv(tmp_path)
+                        prodotti = data_mod.parse_prestashop_csv(tmp_path)
                     finally:
                         os.unlink(tmp_path)
                     if prodotti:
@@ -3326,24 +3026,25 @@ elif p_r is not None:
                         if not prodotti_ordinati:
                             st.caption("Nessun prodotto corrisponde alla ricerca.")
                         ali_sel = st.selectbox("Seleziona Prodotto", prodotti_ordinati, key="sel_prodotto_piano") if prodotti_ordinati else None
-                        b_info = df_a[df_a['Alimento'] == ali_sel].iloc[0]
-                        porzioni_box = str(b_info.get('Porzioni_Confezione', '1'))
+                        if ali_sel:
+                            b_info = df_a[df_a['Alimento'] == ali_sel].iloc[0]
+                            porzioni_box = str(b_info.get('Porzioni_Confezione', '1'))
 
-                        col_q, col_p = st.columns(2)
-                        quant = col_q.number_input("N. Scatole al giorno", min_value=1, value=1, step=1)
-                        col_p.text_input("Pz. in 1 Scatola", value=porzioni_box, disabled=True)
-                        porz_num = to_f(porzioni_box) if to_f(porzioni_box) > 0 else 1
-                        giorni_coperti = int(quant * porz_num)
-                        st.caption(f"📦 {quant} scatola/e × {int(porz_num)} pz = **{giorni_coperti} giorni di copertura**")
+                            col_q, col_p = st.columns(2)
+                            quant = col_q.number_input("N. Scatole al giorno", min_value=1, value=1, step=1)
+                            col_p.text_input("Pz. in 1 Scatola", value=porzioni_box, disabled=True)
+                            porz_num = to_f(porzioni_box) if to_f(porzioni_box) > 0 else 1
+                            giorni_coperti = int(quant * porz_num)
+                            st.caption(f"📦 {quant} scatola/e × {int(porz_num)} pz = **{giorni_coperti} giorni di copertura**")
 
-                        if st.button("➕ Inserisci nel Piano", use_container_width=True, type="primary"):
-                            n_d = [
-                                p_r['Codice_Fiscale'], visita_selezionata, step_sel, giorni_sel, pasto_sel, ali_sel, quant,
-                                to_f(b_info['Kcal'])*quant, to_f(b_info['Carbo_Netti'])*quant,
-                                to_f(b_info['Prot'])*quant, to_f(b_info['Grassi'])*quant
-                            ]
-                            pd.concat([df_d, pd.DataFrame([n_d], columns=COLS_DIETA)]).to_csv(DB_DIETE, index=False)
-                            st.rerun()
+                            if st.button("➕ Inserisci nel Piano", use_container_width=True, type="primary"):
+                                n_d = [
+                                    p_r['Codice_Fiscale'], visita_selezionata, step_sel, giorni_sel, pasto_sel, ali_sel, quant,
+                                    to_f(b_info['Kcal'])*quant, to_f(b_info['Carbo_Netti'])*quant,
+                                    to_f(b_info['Prot'])*quant, to_f(b_info['Grassi'])*quant
+                                ]
+                                pd.concat([df_d, pd.DataFrame([n_d], columns=COLS_DIETA)]).to_csv(DB_DIETE, index=False)
+                                st.rerun()
                     else:
                         st.warning("Il database alimenti è vuoto.")
                 st.markdown("</div>", unsafe_allow_html=True)
@@ -3367,6 +3068,7 @@ elif p_r is not None:
 
                 # ── SEMPRE: Riepilogo card pasti con semaforo ──
                 st.markdown("##### 🍽️ Riepilogo Pasti Giornalieri")
+                st.caption(f"📅 Stesso giorno tipo ripetuto per **{giorni_sel}** giorni")
 
                 lista_pasti_attiva = LISTA_PASTI_DONNA if sesso_paz == 'F' else LISTA_PASTI_UOMO
                 # Step 2: aggiungi Cena se non presente
@@ -3376,7 +3078,8 @@ elif p_r is not None:
 
                 emoji_pasti  = {'Colazione':'☀️','Spuntino Mattina':'🍎','Spuntino/Merenda':'🍎','Pranzo':'🥗','Merenda':'🍊','Cena':'🌙','Dopo Cena':'🌛'}
                 colori_pasti = {'Colazione':'#FFF3CD','Spuntino Mattina':'#FFE6CC','Spuntino/Merenda':'#FFE6CC','Pranzo':'#D4EDDA','Merenda':'#D1ECF1','Cena':'#E2E3E5','Dopo Cena':'#E8DAEF'}
-                colori_border= {'Colazione':'#f39c12','Spuntino Mattina':'#e67e22','Spuntino/Merenda':'#e67e22','Pranzo':'#27ae60','Merenda':'#17a2b8','Cena':'#6c757d','Dopo Cena':'#8e44ad'}
+                # Intestazioni pasto in stile Nutribook (barra colorata piena)
+                colori_border= {'Colazione':'#3498db','Spuntino Mattina':'#e67e22','Spuntino/Merenda':'#e67e22','Pranzo':'#e74c3c','Merenda':'#9b59b6','Cena':'#2c3e50','Dopo Cena':'#8e44ad'}
 
                 if not dieta_p.empty:
                     dieta_p_ext2 = dieta_p.copy()
@@ -3438,7 +3141,6 @@ elif p_r is not None:
                         gg = int(r['Giorni_Coperti'])
                         dettaglio_righe += f"<div style='font-size:9px;color:#444;margin-top:2px;text-align:left;padding:0 6px;'>{nome_breve}: <b>{gg}gg</b></div>"
 
-                    # Semaforo: se c'è almeno una proteina naturale nel pasto → copre tutti i giorni selezionati
                     ha_proteina = not righe_pasto.empty and righe_pasto['Alimento'].str.startswith('🥩').any()
                     coperti = target if ha_proteina else giorni_pasto
                     pct_sem = min(coperti / target, 1.0) if target > 0 else 0
@@ -3451,10 +3153,11 @@ elif p_r is not None:
                     barra_sem   = int(pct_sem * 100)
                     mancanti_sem = max(0, target - coperti)
 
+                    # Card con intestazione colorata in stile Nutribook (barra piena in alto)
                     html_card = (
-                        f'<div style="background:{bg};border:1px solid #e0e6ed;border-top:4px solid {border};border-radius:8px;padding:10px 8px;text-align:center;margin-bottom:6px;">'
-                        f'<div style="font-size:18px;">{emoji}</div>'
-                        f'<div style="font-size:10px;font-weight:800;color:#2c3e50;margin-top:2px;">{pasto}</div>'
+                        f'<div style="background:{bg};border:1px solid #e0e6ed;border-radius:8px;overflow:hidden;margin-bottom:6px;">'
+                        f'<div style="background:{border};color:#fff;padding:8px 10px;font-size:12px;font-weight:800;text-align:center;">{emoji} {pasto}</div>'
+                        f'<div style="padding:10px 8px;text-align:center;">'
                         f'<div style="font-size:22px;font-weight:900;color:{border};margin:4px 0;">{giorni_pasto if n_ali > 0 else chr(8212)}</div>'
                         f'<div style="font-size:10px;color:#6b7280;margin-bottom:4px;">giorni totali</div>'
                         + dettaglio_righe
@@ -3507,16 +3210,27 @@ elif p_r is not None:
                     pasti_target_giorno = len(lista_pasti_vis)  # include Cena proteica per step 2
                     colore_prog = "#2ecc71" if pasti_inseriti >= pasti_target_giorno else "#e67e22"
 
+                    # Barra Kcal stile Nutribook (effettivo vs riferimento 600-800 kcal)
+                    kcal_ref_min, kcal_ref_max = 600, 800
+                    pct_kcal = min(kcal_giorno / kcal_ref_max, 1.0) if kcal_ref_max > 0 else 0
+                    barra_pct = int(pct_kcal * 100)
                     st.markdown(f"""
                     <div style="background:#f8fafc;border:1px solid #e0e6ed;border-radius:8px;padding:12px 16px;margin-bottom:10px;">
-                        <div style="font-size:13px;font-weight:700;color:#2c3e50;margin-bottom:8px;">📅 Giorno tipo — Macronutrienti per 1 giorno</div>
-                        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:8px;">
-                            <div style="text-align:center;"><div style="font-size:20px;font-weight:900;color:#e74c3c;">{kcal_giorno:.0f}</div><div style="font-size:10px;color:#6b7280;">Kcal/giorno</div></div>
+                        <div style="font-size:13px;font-weight:700;color:#2c3e50;margin-bottom:8px;">📅 Macronutrienti — Giorno tipo</div>
+                        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px;">
+                            <div style="text-align:center;"><div style="font-size:20px;font-weight:900;color:#e74c3c;">{kcal_giorno:.0f}</div><div style="font-size:10px;color:#6b7280;">Kcal</div></div>
                             <div style="text-align:center;"><div style="font-size:20px;font-weight:900;color:#3498db;">{prot_giorno:.1f}g</div><div style="font-size:10px;color:#6b7280;">Proteine</div></div>
                             <div style="text-align:center;"><div style="font-size:20px;font-weight:900;color:#f39c12;">{grassi_giorno:.1f}g</div><div style="font-size:10px;color:#6b7280;">Grassi</div></div>
-                            <div style="text-align:center;"><div style="font-size:20px;font-weight:900;color:#27ae60;">{carbo_giorno:.1f}g</div><div style="font-size:10px;color:#6b7280;">Carbo Netti</div></div>
+                            <div style="text-align:center;"><div style="font-size:20px;font-weight:900;color:#27ae60;">{carbo_giorno:.1f}g</div><div style="font-size:10px;color:#6b7280;">Carbo</div></div>
                         </div>
-                        <div style="font-size:12px;color:{colore_prog};font-weight:700;">
+                        <div style="margin-bottom:6px;">
+                            <div style="font-size:10px;color:#64748b;margin-bottom:4px;">Kcal giornaliere (riferimento {kcal_ref_min}-{kcal_ref_max})</div>
+                            <div style="background:#e2e8f0;border-radius:6px;height:10px;overflow:hidden;">
+                                <div style="background:linear-gradient(90deg,#2ecc71,#27ae60);width:{barra_pct}%;height:100%;border-radius:6px;"></div>
+                            </div>
+                            <div style="font-size:11px;color:#475569;margin-top:4px;">Effettivo: <b>{kcal_giorno:.0f}</b> kcal</div>
+                        </div>
+                        <div style="font-size:12px;color:{colore_prog};font-weight:700;padding-top:6px;border-top:1px solid #e0e6ed;">
                             🍽️ Pasti inseriti: {pasti_inseriti} / {pasti_target_giorno}
                             {'✅ Giorno completo!' if pasti_inseriti >= pasti_target_giorno else f' — mancano {pasti_target_giorno - pasti_inseriti} pasti'}
                         </div>
@@ -3723,7 +3437,7 @@ elif p_r is not None:
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
-            df_pr_fresh = carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
+            df_pr_fresh = data_mod.carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
             prescr_visita = df_pr_fresh[
                 (df_pr_fresh['Codice_Fiscale'].astype(str).str.strip() == str(p_r['Codice_Fiscale']).strip()) &
                 (df_pr_fresh['Data_Visita'].astype(str) == str(visita_prescr))
@@ -3765,7 +3479,7 @@ elif p_r is not None:
 
                     if st.form_submit_button("💾 Aggiungi alla prescrizione", use_container_width=True, type="primary"):
                         if nome_da_usare:
-                            df_i_fresh = carica_database(DB_INTEGRATORI, COLS_INTEGR)
+                            df_i_fresh = data_mod.carica_database(DB_INTEGRATORI, COLS_INTEGR)
                             if nome_da_usare not in df_i_fresh['Nome_Integratore'].astype(str).values:
                                 pd.concat([
                                     df_i_fresh,
@@ -3776,7 +3490,7 @@ elif p_r is not None:
                                 p_r['Codice_Fiscale'], visita_prescr, data_inizio_pr,
                                 nome_da_usare, pr_posologia or "", pr_note or ""
                             ]], columns=COLS_PRESCR)
-                            df_pr_new = carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
+                            df_pr_new = data_mod.carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
                             pd.concat([df_pr_new, nuova_riga], ignore_index=True).to_csv(DB_PRESCRIZIONI, index=False)
                             st.success(f"✅ **{nome_da_usare}** aggiunto alla prescrizione.")
                             st.rerun()
@@ -3794,7 +3508,7 @@ elif p_r is not None:
                                 st.warning(f"⚠️ Eliminare **{row_pr['Nome_Integratore']}** dalla prescrizione?")
                                 cpr1, cpr2 = st.columns(2)
                                 if cpr1.button("✅ Sì, elimina", key=f"conf_si_prescr_{idx_pr}", use_container_width=True, type="primary"):
-                                    df_pr_upd = carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
+                                    df_pr_upd = data_mod.carica_database(DB_PRESCRIZIONI, COLS_PRESCR)
                                     df_pr_upd.drop(idx_pr, errors='ignore').to_csv(DB_PRESCRIZIONI, index=False)
                                     st.session_state.confirm_del_prescr = None
                                     st.rerun()
@@ -3996,21 +3710,14 @@ else:
         n_paz = len(df_p.drop_duplicates('Codice_Fiscale')) if not df_p.empty else 0
         n_visite = len(df_p) if not df_p.empty else 0
         n_ali = len(df_a) if not df_a.empty else 0
-        st.markdown(f"""
-        <div class="card" style="margin-bottom: 16px; padding: 12px 20px; border-left: 4px solid #f5c99a;">
-            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
-                <div>
-                    <span style="font-size: 18px; font-weight: 800; color: #1a2332;">Gestione Studio Nutrizionale</span>
-                    <span style="font-size: 11px; color: #64748b; margin-left: 8px;">VLEKT PRO</span>
-                </div>
-                <div style="display: flex; gap: 20px; font-size: 13px;">
-                    <span><b style="color:#2563eb;">{n_paz}</b> <span style="color:#64748b;">pazienti</span></span>
-                    <span><b style="color:#16a34a;">{n_visite}</b> <span style="color:#64748b;">visite</span></span>
-                    <span><b style="color:#64748b;">{n_ali}</b> <span style="color:#64748b;">alimenti in DB</span></span>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+
+        # Riga compatta: titolo + numeri
+        sc1, sc2, sc3, sc4 = st.columns([2, 0.6, 0.6, 0.6])
+        sc1.markdown(f"<div style='font-size:15px;font-weight:700;color:#1f2937;'>Panoramica</div>", unsafe_allow_html=True)
+        sc2.markdown(f"<div style='font-size:12px;color:#64748b;'><b>{n_paz}</b> pazienti</div>", unsafe_allow_html=True)
+        sc3.markdown(f"<div style='font-size:12px;color:#64748b;'><b>{n_visite}</b> visite</div>", unsafe_allow_html=True)
+        sc4.markdown(f"<div style='font-size:12px;color:#64748b;'><b>{n_ali}</b> alimenti</div>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-bottom:12px;'></div>", unsafe_allow_html=True)
 
     if not st.session_state.show_utility:
         if not df_p.empty:
@@ -4019,28 +3726,35 @@ else:
                 display_df['DT_sort'] = pd.to_datetime(display_df['Data_Visita'], format='%d/%m/%Y', errors='coerce')
                 display_df = display_df.sort_values('DT_sort', ascending=False).drop(columns=['DT_sort'])
 
-            # Proporzioni colonne — fisse e usate sia per header che per righe
-            COL_W = [0.25, 2.6, 1.3, 0.8, 0.7]
+            home_search = st.text_input("🔍 Cerca", placeholder="cognome, nome o CF...", key="home_search_paziente", label_visibility="collapsed")
+            if home_search and home_search.strip():
+                q = home_search.strip().lower()
+                mask = (
+                    display_df['Cognome'].astype(str).str.lower().str.contains(q, na=False) |
+                    display_df['Nome'].astype(str).str.lower().str.contains(q, na=False) |
+                    display_df['Codice_Fiscale'].astype(str).str.lower().str.contains(q, na=False)
+                )
+                display_df = display_df[mask]
+            n_show = len(display_df)
 
-            # ── INTESTAZIONE ──
+            # Colonne compatte: Apri (stretto) | Nome (sufficiente) | Data | Peso | BMI
+            COL_W = [0.4, 1.8, 1, 0.5, 0.5]
+
             h_btn, h_nome, h_data, h_peso, h_bmi = st.columns(COL_W)
-            h_btn.markdown("")
-            h_nome.markdown("<span style='font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;'>Paziente</span>", unsafe_allow_html=True)
-            h_data.markdown("<span style='font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;'>Ultima visita</span>", unsafe_allow_html=True)
-            h_peso.markdown("<span style='font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;'>Peso</span>", unsafe_allow_html=True)
-            h_bmi.markdown("<span style='font-size:11px;font-weight:700;color:#374151;text-transform:uppercase;letter-spacing:.6px;'>BMI</span>", unsafe_allow_html=True)
-            st.markdown("<hr style='margin:4px 0 6px 0; border-color:#e5e7eb;'>", unsafe_allow_html=True)
+            h_btn.caption("")
+            h_nome.caption("Paziente")
+            h_data.caption("Ultima visita")
+            h_peso.caption("Peso")
+            h_bmi.caption("BMI")
+            st.markdown("<hr style='margin:2px 0 4px 0;border-color:#e5e7eb;'>", unsafe_allow_html=True)
 
-            # ── RIGHE PAZIENTI ──
             for i, row in display_df.head(15).iterrows():
                 bmi_val = to_f(row.get('BMI', 0))
                 bmi_label, bmi_color = calcola_stato_bmi(bmi_val) if bmi_val > 0 else ('—', '#6b7280')
 
                 c_btn, c_nome, c_data, c_peso, c_bmi = st.columns(COL_W)
 
-                if c_btn.button("↗", key=f"open_home_{i}",
-                                help=f"Apri {row.get('Cognome','')} {row.get('Nome','')}",
-                                use_container_width=True):
+                if c_btn.button("Apri", key=f"open_home_{i}", help=f"Apri {row.get('Cognome','')} {row.get('Nome','')}", use_container_width=True):
                     match = df_p[df_p['Codice_Fiscale'] == row['Codice_Fiscale']]
                     if not match.empty:
                         st.session_state.p_attivo = match.iloc[-1].to_dict()
@@ -4054,26 +3768,16 @@ else:
                         st.rerun()
 
                 c_nome.markdown(
-                    f"<div style='line-height:1.3; padding:4px 0;'>"
-                    f"<div style='font-size:14px;font-weight:700;color:#111827;'>{row.get('Cognome','')} {row.get('Nome','')}</div>"
-                    f"<div style='font-size:11px;color:#4b5563;margin-top:2px;font-weight:500;'>{row.get('Codice_Fiscale','')}</div>"
-                    f"</div>", unsafe_allow_html=True)
-
-                c_data.markdown(
-                    f"<div style='padding:4px 0;font-size:13px;color:#4b5563;'>{row.get('Data_Visita','—')}</div>",
+                    f"<div style='font-size:13px;font-weight:600;color:#111827;'>{row.get('Cognome','')} {row.get('Nome','')}</div>"
+                    f"<div style='font-size:10px;color:#64748b;'>{row.get('Codice_Fiscale','')}</div>",
                     unsafe_allow_html=True)
+                c_data.caption(row.get('Data_Visita', '—'))
+                c_peso.caption(f"{row.get('Peso','—')} kg")
+                c_bmi.markdown(f"<span style='font-size:12px;font-weight:700;color:{bmi_color};'>{row.get('BMI','—')}</span>", unsafe_allow_html=True)
 
-                c_peso.markdown(
-                    f"<div style='padding:4px 0;font-size:13px;font-weight:600;color:#374151;'>"
-                    f"{row.get('Peso','—')} <span style='font-size:11px;font-weight:400;color:#6b7280;'>kg</span></div>",
-                    unsafe_allow_html=True)
+                st.markdown("<div style='border-bottom:1px solid #f1f5f9;margin:2px 0;'></div>", unsafe_allow_html=True)
 
-                c_bmi.markdown(
-                    f"<div style='padding:4px 0;'>"
-                    f"<span style='font-size:13px;font-weight:800;color:{bmi_color};'>{row.get('BMI','—')}</span>"
-                    f"<div style='font-size:9px;color:{bmi_color};opacity:0.8;'>{bmi_label}</div>"
-                    f"</div>", unsafe_allow_html=True)
-
-                st.markdown("<div style='border-bottom:1px solid #f3f4f6; margin-bottom:2px;'></div>", unsafe_allow_html=True)
+            if n_show > 15:
+                st.caption(f"Primi 15 di {n_show}. Usa la ricerca per filtrare.")
         else:
-            st.info("👈 Nessun paziente nel database. Utilizza la barra laterale per crearne uno nuovo.")
+            st.info("Nessun paziente. Usa **➕ Crea nuovo paziente** nella barra laterale.")
