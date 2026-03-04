@@ -1702,20 +1702,17 @@ if st.session_state.show_utility:
 
     st.markdown("---")
 
-    # ── 6. CONTROLLA AGGIORNAMENTI ──
-    st.markdown("#### 🔄 Controlla aggiornamenti")
-    if not (CHECK_UPDATE_URL and str(CHECK_UPDATE_URL).strip()):
-        st.info("Per abilitare il controllo: imposta **CHECK_UPDATE_URL** in `config.py` con l’URL che restituisce la versione più recente (solo testo, es. `1.1.0`).")
-    else:
+    # ── 6. CONTROLLA AGGIORNAMENTI (visibile solo se CHECK_UPDATE_URL impostato in config.py) ──
+    if CHECK_UPDATE_URL and str(CHECK_UPDATE_URL).strip():
+        st.markdown("#### 🔄 Controlla aggiornamenti")
         if st.button("Controlla aggiornamenti", key="btn_check_update"):
             status, value = check_update_available(VERSION, CHECK_UPDATE_URL)
             if status == "new":
-                st.success(f"✅ Disponibile una nuova versione: **{value}**. Controlla come scaricare l’aggiornamento (chiavetta, link, ecc.).")
+                st.success(f"✅ Disponibile una nuova versione: **{value}**. Controlla come scaricare l'aggiornamento (chiavetta, link, ecc.).")
             elif status == "current":
                 st.info(f"Sei aggiornato: versione **{VERSION}**.")
             else:
                 st.warning(f"Impossibile verificare: {value}")
-
     st.markdown("---")
     if _auth and _is_admin:
         st.markdown("#### ⚙️ Amministrazione")
