@@ -388,8 +388,6 @@ if _auth:
                     st.rerun()
                 else:
                     st.error(msg_reset)
-        if os.environ.get("VLEKT_DEV") == "1":
-            st.caption("Primo accesso amministratore: utente **admin** / password **Admin123!** — cambiala subito da Utility.")
         with st.expander("🔑 Password dimenticata? Recupera con email"):
             st.caption("Inserisci l’**email** o lo **username** del tuo account. Se l’email è registrata riceverai una password temporanea; altrimenti la vedrai qui (chiedi all’amministratore di inserire la tua email nel tuo account).")
             with st.form("form_recupera_pwd"):
