@@ -169,7 +169,14 @@ def check_update_available(current_version, url, timeout_sec=5):
     try:
         with urlopen(str(url).strip(), timeout=timeout_sec) as resp:
             remote = resp.read().decode("utf-8", errors="ignore").strip()
-    except (URLError, HTTPError, OSError) as e:
+    except HTTPError as e:
+        if e.code == 404:
+            return "error", (
+                "404 Not Found: l’URL non è raggiungibile. Verifica che il repo sia su GitHub, "
+                "che il branch in config.py sia corretto (main o master) e che latest_version.txt sia nella root e sia stato caricato (push)."
+            )
+        return "error", str(e) if str(e) else "Errore di connessione."
+    except (URLError, OSError) as e:
         return "error", str(e) if str(e) else "Errore di connessione."
     remote_ver = parse_version(remote)
     current_ver = parse_version(current_version)

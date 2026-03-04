@@ -5,8 +5,10 @@ VERSION = "1.0.0"
 APP_NAME = "VLEKT PRO"
 
 # URL che restituisce la versione più recente (solo testo, es. "1.1.0"). Vuoto = Controlla aggiornamenti disattivato.
-# Usa il file latest_version.txt in repo GitHub (raw). Se repo/branch diversi, aggiorna qui.
-CHECK_UPDATE_URL = "https://raw.githubusercontent.com/alessandrodente/Studio_AD/main/latest_version.txt"
+# Quando il repo è su GitHub con latest_version.txt in root, imposta es.:
+#   https://raw.githubusercontent.com/TUO_USER/TUO_REPO/main/latest_version.txt
+#   (oppure .../master/... se il branch è master)
+CHECK_UPDATE_URL = ""
 
 LISTA_PASTI_UOMO = ['Colazione', 'Spuntino Mattina', 'Pranzo', 'Merenda', 'Cena', 'Dopo Cena']
 LISTA_PASTI_DONNA = ['Colazione', 'Spuntino/Merenda', 'Pranzo', 'Cena']
