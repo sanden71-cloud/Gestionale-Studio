@@ -204,9 +204,12 @@ def find_user_by_email_or_username(key: str):
     key = str(key).strip().lower()
     data = _load_users()
     for u in data.get("users", []):
-        if u.get("username", "").lower() == key:
+        uname = (u.get("username") or "").strip().lower()
+        uemail = (u.get("email") or "").strip().lower()
+        if uname == key or uemail == key:
             return u
-        if (u.get("email") or "").strip().lower() == key:
+        # Se hanno inserito un'email, prova anche a matchare lo username con la parte prima della @
+        if "@" in key and uname == key.split("@")[0]:
             return u
     return None
 
@@ -258,7 +261,7 @@ def request_password_reset(email_or_username: str) -> tuple[bool, str, str | Non
     """
     user = find_user_by_email_or_username(email_or_username)
     if not user:
-        return False, "Nessun utente trovato con questa email o username.", None
+        return False, "Nessun utente trovato. Prova con lo username oppure verifica che l'email sia stata impostata dall'amministratore per il tuo account.", None
     if not user.get("attivo", True):
         return False, "Utente disattivato. Contatta l'amministratore.", None
     temp_pass = secrets.token_urlsafe(10)  # es. 10 caratteri url-safe
