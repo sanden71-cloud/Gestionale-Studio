@@ -119,9 +119,10 @@ def toggle_user_active(username: str) -> bool:
     return False
 
 
-def create_user(username: str, password: str, is_admin_user: bool = False, nome: str = "", cognome: str = "") -> tuple[bool, str]:
+def create_user(username: str, password: str, is_admin_user: bool = False, nome: str = "", cognome: str = "", attivo: bool = False) -> tuple[bool, str]:
     """
     Crea un nuovo utente. Ritorna (ok, msg).
+    attivo=False: l'utente non può accedere finché un amministratore non lo attiva da Utility.
     Non permette di creare un secondo admin.
     """
     data = _load_users()
@@ -143,7 +144,7 @@ def create_user(username: str, password: str, is_admin_user: bool = False, nome:
         "nome": (nome or "").strip(),
         "cognome": (cognome or "").strip(),
         "password_hash": _hash_password(password),
-        "attivo": True,
+        "attivo": attivo,
         "is_admin": is_admin_user,
         "created_at": str(__import__("datetime").datetime.now().isoformat()),
     })

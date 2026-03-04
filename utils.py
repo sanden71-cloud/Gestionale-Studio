@@ -1,7 +1,22 @@
 # --- Funzioni di utilità (VLEKT PRO) ---
+import json
+import os
 from datetime import date
 from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
+
+
+def read_update_info(app_dir, default_version="1.0.0"):
+    """Legge update_info.json nella cartella app_dir. Ritorna (versione_pubblicata, download_url)."""
+    try:
+        path = os.path.join(app_dir, "update_info.json")
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                d = json.load(f)
+            return str(d.get("version", default_version)).strip(), str(d.get("download_url", "")).strip()
+    except Exception:
+        pass
+    return default_version, ""
 
 
 def to_f(value):

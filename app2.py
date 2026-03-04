@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import json
 import time
 import base64
 from datetime import date, datetime
@@ -33,14 +34,14 @@ except ImportError:
     st_searchbox = None
 
 from config import (
-    VERSION, APP_NAME, CHECK_UPDATE_URL, DEMO_UPDATE_VERSION,
+    VERSION, APP_NAME,
     LISTA_PASTI_UOMO, LISTA_PASTI_DONNA, LISTA_PASTI, ORDINE_PASTI, lista_laf,
     COLS_PAZ, COLS_ALI, COLS_DIETA, COLS_INTEGR, COLS_PRESCR, COLS_PROT,
     PDF_PIANI, PDF_NOME_CFG,
 )
 from utils import (
     to_f, calcola_eta, calcola_eta_anni_mesi, calcola_info_visite, _norm_data_visita,
-    calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, check_update_available, parse_version,
+    calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, parse_version, read_update_info,
 )
 import data as data_mod
 
@@ -1375,6 +1376,17 @@ d_form = df_p.iloc[idx_mod] if idx_mod is not None else p_r
 # Navbar (logo + breadcrumb) — sopra tutto il contenuto principale
 _render_navbar()
 
+# Banner aggiornamento in apertura: se è disponibile una versione più nuova, lo mostriamo subito
+_app_dir = os.path.dirname(os.path.abspath(__file__))
+_banner_ver, _banner_url = read_update_info(_app_dir, VERSION)
+if parse_version(_banner_ver) > parse_version(VERSION):
+    _msg = f"**È disponibile un aggiornamento (versione {_banner_ver}).** "
+    if _banner_url:
+        _msg += f"Scaricalo qui: [Scarica aggiornamento]({_banner_url})"
+    else:
+        _msg += "Vai in **Utility → Verifica aggiornamenti** per maggiori informazioni."
+    st.warning(_msg, icon="⚠️")
+
 # Inizializza session state integratori se mancanti
 if 'edit_integr_idx' not in st.session_state: st.session_state.edit_integr_idx = None
 if 'confirm_del_integr' not in st.session_state: st.session_state.confirm_del_integr = None
@@ -1497,6 +1509,7 @@ if st.session_state.show_utility:
                     st.rerun()
         st.markdown("---")
         st.markdown("#### ➕ Crea nuovo utente")
+        st.caption("I nuovi utenti restano **disattivati** finché non li attivi dalla tabella (pulsante Attiva). Così abiliti l’accesso online solo quando sei pronto.")
         with st.form("admin_nuovo_utente"):
             cn, cc = st.columns(2)
             with cn:
@@ -1506,6 +1519,7 @@ if st.session_state.show_utility:
             nu = st.text_input("Username", placeholder="es. mario.rossi")
             np = st.text_input("Password", type="password", placeholder="minimo 6 caratteri")
             np_rip = st.text_input("Ripeti password", type="password")
+            attiva_subito = st.checkbox("Attiva utente subito (può accedere dopo la creazione)", value=False)
             if st.form_submit_button("Crea utente"):
                 if not nu or not np:
                     st.error("Inserisci username e password.")
@@ -1514,7 +1528,7 @@ if st.session_state.show_utility:
                 elif len(np) < 6:
                     st.error("La password deve essere di almeno 6 caratteri.")
                 else:
-                    ok, msg = _auth.create_user(nu, np, is_admin_user=False, nome=nuovo_nome or "", cognome=nuovo_cognome or "")
+                    ok, msg = _auth.create_user(nu, np, is_admin_user=False, nome=nuovo_nome or "", cognome=nuovo_cognome or "", attivo=attiva_subito)
                     if ok:
                         _auth.init_user_data_folder(_auth.get_user_data_dir(nu), [
                             ('database_pazienti.csv', COLS_PAZ),
@@ -1524,7 +1538,7 @@ if st.session_state.show_utility:
                             ('database_prescrizioni.csv', COLS_PRESCR),
                             ('database_proteine.csv', COLS_PROT),
                         ])
-                        st.success(msg)
+                        st.success(msg + (" L’utente è attivo e può accedere." if attiva_subito else " Attivalo dalla tabella quando vuoi abilitarlo."))
                     else:
                         st.error(msg)
                     st.rerun()
@@ -1547,10 +1561,23 @@ if st.session_state.show_utility:
         (DB_PROTEINE, "Proteine naturali"),
     ]
     app_dir = os.path.dirname(os.path.abspath(__file__))
+    _update_info_path = os.path.join(app_dir, "update_info.json")
+
+    def _write_update_info(version, download_url):
+        try:
+            with open(_update_info_path, "w", encoding="utf-8") as f:
+                json.dump({"version": version, "download_url": download_url}, f, indent=2)
+            return True
+        except Exception:
+            return False
+
+    # Directory dati utente (per backup/restore/archivi)
+    _udir = _user_dir if _auth else app_dir
+    _archivi_dir = os.path.join(_udir, "archivi") if _auth else None
 
     # ── 1. BACKUP DATABASE ──
     st.markdown("#### 📦 Backup database")
-    st.markdown("Salva tutti i file CSV in un archivio ZIP con timestamp. Conservalo in un luogo sicuro.")
+    st.markdown("Salva tutti i file CSV in un archivio ZIP con timestamp. Conservalo in un luogo sicuro." + (" Una copia viene salvata anche in **I miei archivi**." if _auth else ""))
     if st.button("📥 Crea backup completo", type="primary", key="btn_backup"):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         zip_name = f"backup_vlekt_{ts}.zip"
@@ -1558,12 +1585,16 @@ if st.session_state.show_utility:
         try:
             with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                 for db_file, _ in DB_FILES:
-                    fp = os.path.join(app_dir, db_file)
-                    if os.path.exists(fp):
-                        zf.write(fp, db_file)
+                    if os.path.exists(db_file):
+                        zf.write(db_file, os.path.basename(db_file))
             with open(zip_path, 'rb') as f:
                 st.session_state.backup_bytes = f.read()
             st.session_state.backup_filename = zip_name
+            if _archivi_dir:
+                os.makedirs(_archivi_dir, exist_ok=True)
+                archivi_path = os.path.join(_archivi_dir, zip_name)
+                with open(archivi_path, 'wb') as f:
+                    f.write(st.session_state.backup_bytes)
             os.remove(zip_path)
             st.rerun()
         except Exception as e:
@@ -1595,11 +1626,50 @@ if st.session_state.show_utility:
                 with zipfile.ZipFile(file_restore, 'r') as zf:
                     for name in zf.namelist():
                         if name.endswith('.csv'):
-                            zf.extract(name, app_dir)
+                            zf.extract(name, _udir)
                 st.success("✅ Backup ripristinato. Ricarica la pagina per vedere i dati aggiornati.")
                 st.rerun()
             except Exception as e:
                 st.error(f"Errore durante il ripristino: {e}")
+
+    # ── 2b. I MIEI ARCHIVI (solo con login: ogni utente ha la sua cartella archivi) ──
+    if _auth and _archivi_dir:
+        st.markdown("---")
+        st.markdown("#### 📁 I miei archivi")
+        st.markdown("Backup salvati nella tua area. Puoi scaricarli o ripristinare da uno di essi.")
+        os.makedirs(_archivi_dir, exist_ok=True)
+        _archivi_files = sorted([f for f in os.listdir(_archivi_dir) if f.endswith('.zip')], reverse=True)
+        if not _archivi_files:
+            st.info("Nessun archivio ancora. Crea un backup con il pulsante sopra; una copia verrà salvata qui.")
+        else:
+            for _ar in _archivi_files:
+                _ar_path = os.path.join(_archivi_dir, _ar)
+                _col_dl, _col_restore, _ = st.columns([1, 1, 3])
+                with _col_dl:
+                    with open(_ar_path, 'rb') as _f:
+                        st.download_button("⬇️ Scarica", data=_f.read(), file_name=_ar, mime="application/zip", key=f"dl_arch_{_ar}")
+                with _col_restore:
+                    if st.button("⚠️ Ripristina", key=f"restore_arch_{_ar}"):
+                        st.session_state.restore_archivo_path = _ar_path
+                        st.rerun()
+                st.caption(_ar)
+            if st.session_state.get("restore_archivo_path"):
+                _path = st.session_state.restore_archivo_path
+                st.warning(f"Stai per ripristinare i database da **{os.path.basename(_path)}**. I dati attuali saranno sostituiti.")
+                if st.button("✅ Conferma ripristino", type="primary", key="confirm_restore_arch"):
+                    try:
+                        with zipfile.ZipFile(_path, 'r') as zf:
+                            for name in zf.namelist():
+                                if name.endswith('.csv'):
+                                    zf.extract(name, _udir)
+                        del st.session_state.restore_archivo_path
+                        st.success("Archivio ripristinato. Ricarica la pagina.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(str(e))
+                if st.button("❌ Annulla", key="cancel_restore_arch"):
+                    del st.session_state.restore_archivo_path
+                    st.rerun()
 
     st.markdown("---")
 
@@ -1702,26 +1772,39 @@ if st.session_state.show_utility:
 
     st.markdown("---")
 
-    # ── 6. CONTROLLA AGGIORNAMENTI (visibile se CHECK_UPDATE_URL impostato o DEMO_UPDATE_VERSION per prova) ──
-    _show_update = bool(CHECK_UPDATE_URL and str(CHECK_UPDATE_URL).strip())
-    _demo_ver = str(DEMO_UPDATE_VERSION).strip() if DEMO_UPDATE_VERSION else ""
-    if _demo_ver and parse_version(_demo_ver) > parse_version(VERSION):
-        _show_update = True
-    if _show_update:
-        st.markdown("#### 🔄 Controlla aggiornamenti")
-        if st.button("Controlla aggiornamenti", key="btn_check_update"):
-            if CHECK_UPDATE_URL and str(CHECK_UPDATE_URL).strip():
-                status, value = check_update_available(VERSION, CHECK_UPDATE_URL)
-            elif _demo_ver and parse_version(_demo_ver) > parse_version(VERSION):
-                status, value = "new", _demo_ver
+    # ── 6. GESTIONE VERSIONE E AGGIORNAMENTI (solo amministratore) ──
+    if _auth and _is_admin:
+        st.markdown("#### 📌 Gestione versione e aggiornamenti")
+        st.markdown("Imposta qui la **versione pubblicata** che gli utenti vedono come ultima disponibile e l’**URL** da cui scaricare l’aggiornamento.")
+        _pub_ver, _pub_url = read_update_info(app_dir, VERSION)
+        _col_v, _col_u = st.columns(2)
+        with _col_v:
+            _new_ver = st.text_input("Versione pubblicata", value=_pub_ver or VERSION, key="input_published_version", placeholder="es. 1.0.1")
+        with _col_u:
+            _new_url = st.text_input("URL download aggiornamento", value=_pub_url, key="input_download_url", placeholder="https://...")
+        if st.button("💾 Salva versione e URL", type="primary", key="btn_save_update_info"):
+            _v = str(_new_ver).strip() or VERSION
+            if _write_update_info(_v, str(_new_url).strip()):
+                st.success("Salvato. Gli utenti vedranno la nuova versione e il link di download quando verificano gli aggiornamenti.")
+                st.rerun()
             else:
-                status, value = "current", None
-            if status == "new":
-                st.success(f"✅ Disponibile una nuova versione: **{value}**. Controlla come scaricare l'aggiornamento (chiavetta, link, ecc.).")
-            elif status == "current":
-                st.info(f"Sei aggiornato: versione **{VERSION}**.")
+                st.error("Impossibile salvare (controlla i permessi della cartella dell’app).")
+        st.markdown("---")
+
+    # ── 7. CONTROLLA AGGIORNAMENTI (tutti gli utenti) ──
+    st.markdown("#### 🔄 Verifica aggiornamenti")
+    st.markdown("Controlla se è disponibile una nuova versione dell’applicazione.")
+    if st.button("Verifica aggiornamenti", key="btn_check_update"):
+        _pub_ver, _pub_url = read_update_info(app_dir, VERSION)
+        if parse_version(_pub_ver) > parse_version(VERSION):
+            st.success(f"✅ È disponibile una nuova versione: **{_pub_ver}**.")
+            if _pub_url:
+                st.markdown(f"Scarica l’aggiornamento: [**Scarica aggiornamento**]({_pub_url})")
+                st.link_button("⬇️ Scarica aggiornamento", _pub_url, type="primary", key="link_download_update")
             else:
-                st.warning(f"Impossibile verificare: {value}")
+                st.info("L’amministratore non ha ancora impostato il link di download. Contattalo per ottenere l’aggiornamento.")
+        else:
+            st.info(f"Sei aggiornato: versione **{VERSION}**.")
     st.markdown("---")
     if _auth and _is_admin:
         st.markdown("#### ⚙️ Amministrazione")

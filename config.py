@@ -4,15 +4,8 @@
 VERSION = "1.0.0"
 APP_NAME = "VLEKT PRO"
 
-# URL che restituisce la versione più recente (solo testo, es. "1.1.0"). Vuoto = Controlla aggiornamenti disattivato.
-# Quando il repo è su GitHub con latest_version.txt in root, imposta es.:
-#   https://raw.githubusercontent.com/TUO_USER/TUO_REPO/main/latest_version.txt
-#   (oppure .../master/... se il branch è master)
-CHECK_UPDATE_URL = ""
-
-# Solo per PROVA: imposta una versione (es. "1.0.1") per far comparire il messaggio "Disponibile aggiornamento"
-# senza usare un URL. Utile per vedere come appare online. Lascia "" in produzione.
-DEMO_UPDATE_VERSION = "1.0.1"
+# La versione che gli utenti vedono e l’URL di download si gestiscono da Utility (solo admin):
+# l’amministratore imposta "Versione pubblicata" e "URL download" che vengono salvati in update_info.json.
 
 LISTA_PASTI_UOMO = ['Colazione', 'Spuntino Mattina', 'Pranzo', 'Merenda', 'Cena', 'Dopo Cena']
 LISTA_PASTI_DONNA = ['Colazione', 'Spuntino/Merenda', 'Pranzo', 'Cena']
