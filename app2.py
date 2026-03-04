@@ -39,7 +39,7 @@ from config import (
     COLS_PAZ, COLS_ALI, COLS_DIETA, COLS_INTEGR, COLS_PRESCR, COLS_PROT,
     PDF_PIANI, PDF_NOME_CFG,
 )
-from utils import (
+from vlekt_utils import (
     to_f, calcola_eta, calcola_eta_anni_mesi, calcola_info_visite, _norm_data_visita,
     calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, parse_version, read_update_info,
 )
@@ -400,7 +400,7 @@ if _auth and _is_admin and _user_dir != os.path.dirname(os.path.abspath(__file__
 df_p, df_a, df_d, df_i, df_pr, df_prot, _ = data_mod.load_all_databases(_user_dir)
 
 
-# --- 3. FUNZIONI PDF (restano in app2; usano config e utils) ---
+# --- 3. FUNZIONI PDF (restano in app2; usano config e vlekt_utils) ---
 def genera_piano_dieta_pdf(sesso, step, cognome, nome, data_visita):
     """
     Prende il PDF template corretto (per sesso e step),

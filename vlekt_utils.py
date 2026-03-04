@@ -187,7 +187,7 @@ def check_update_available(current_version, url, timeout_sec=5):
     except HTTPError as e:
         if e.code == 404:
             return "error", (
-                "404 Not Found: l’URL non è raggiungibile. Verifica che il repo sia su GitHub, "
+                "404 Not Found: l'URL non è raggiungibile. Verifica che il repo sia su GitHub, "
                 "che il branch in config.py sia corretto (main o master) e che latest_version.txt sia nella root e sia stato caricato (push)."
             )
         return "error", str(e) if str(e) else "Errore di connessione."
