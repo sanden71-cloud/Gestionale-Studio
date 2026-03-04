@@ -1471,10 +1471,16 @@ if _show_update_banner:
 
 # Banner "Cambia password al primo accesso" (password fornita da admin o recupero)
 if _auth and st.session_state.logged_user and _auth.get_user_must_change_password(st.session_state.logged_user):
-    st.warning(
-        "**Cambia la password al primo accesso.** È stata fornita dall'amministratore o dal recupero. Vai in **Utility** e usa la sezione **Cambia la tua password** per modificarla.",
-        icon="🔐"
-    )
+    _c_pwd, _c_btn = st.columns([3, 1])
+    with _c_pwd:
+        st.warning(
+            "**Cambia la password al primo accesso.** È stata fornita dall'amministratore o dal recupero.",
+            icon="🔐"
+        )
+    with _c_btn:
+        if st.button("Vai a Cambia password →", type="primary", key="btn_goto_cambia_pwd"):
+            st.session_state.show_utility = True
+            st.rerun()
 
 # Inizializza session state integratori se mancanti
 if 'edit_integr_idx' not in st.session_state: st.session_state.edit_integr_idx = None
@@ -1519,6 +1525,7 @@ if st.session_state.show_utility:
                 smtp_user = st.text_input("Utente SMTP", value=_cfg.get("smtp_user") or "", placeholder="email o username")
                 smtp_password = st.text_input("Password SMTP", value="", type="password", placeholder="•••••••• (lascia vuoto per non modificare)")
                 smtp_use_tls = st.checkbox("Usa TLS", value=bool(_cfg.get("smtp_use_tls", True)))
+                from_name = st.text_input("Nome mittente (mostrato al destinatario)", value=_cfg.get("from_name") or "", placeholder="es. Software Gestionale AD")
                 from_email = st.text_input("Indirizzo mittente (From)", value=_cfg.get("from_email") or "", placeholder="es. noreply@tuodominio.it")
                 if st.form_submit_button("Salva configurazione"):
                     # Mantieni password esistente se lasciata vuota
@@ -1532,6 +1539,7 @@ if st.session_state.show_utility:
                         "smtp_user": (smtp_user or "").strip(),
                         "smtp_password": pwd_final,
                         "smtp_use_tls": smtp_use_tls,
+                        "from_name": (from_name or "").strip(),
                         "from_email": (from_email or "").strip(),
                     }
                     ok_cfg, msg_cfg = _auth.save_config(data)

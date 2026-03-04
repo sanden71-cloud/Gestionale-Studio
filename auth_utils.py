@@ -349,6 +349,7 @@ def _send_email(to: str, subject: str, body: str) -> tuple[bool, str]:
     password = cfg.get("smtp_password") or os.environ.get("VLEKT_SMTP_PASSWORD") or ""
     use_tls = cfg.get("smtp_use_tls", True)
     from_addr = (cfg.get("from_email") or user or "noreply@vlekt.local").strip()
+    from_name = (cfg.get("from_name") or "").strip()
     if not host or not user or not password:
         return False, "SMTP non configurato: inserisci host, utente e password in Utility > Configurazione (licenza e SMTP)."
     try:
@@ -356,7 +357,11 @@ def _send_email(to: str, subject: str, body: str) -> tuple[bool, str]:
         from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
         msg = MIMEMultipart()
-        msg["From"] = from_addr
+        if from_name:
+            from email.utils import formataddr
+            msg["From"] = formataddr((from_name, from_addr))
+        else:
+            msg["From"] = from_addr
         msg["To"] = to
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain", "utf-8"))
@@ -492,6 +497,7 @@ def get_config() -> dict:
         "smtp_password": "",
         "smtp_use_tls": True,
         "from_email": "",
+        "from_name": "",
     }
     if _sync_key_set():
         fernet = _get_fernet()
@@ -536,7 +542,7 @@ def get_config() -> dict:
 def save_config(config_dict: dict) -> tuple[bool, str]:
     """Salva config (in config.enc cifrato se sync attivo, altrimenti config.json)."""
     _ensure_dirs()
-    allowed = {"license_key", "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_use_tls", "from_email"}
+    allowed = {"license_key", "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_use_tls", "from_email", "from_name"}
     out = {k: config_dict.get(k) for k in allowed if k in config_dict}
     if "smtp_port" in out and out["smtp_port"] is not None:
         try:

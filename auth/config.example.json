@@ -7,6 +7,7 @@
   "smtp_user": "tua_email@gmail.com",
   "smtp_password": "LA_TUA_PASSWORD_APP_16_CARATTERI",
   "smtp_use_tls": true,
+  "from_name": "Software Gestionale AD",
   "from_email": "tua_email@gmail.com",
-  "comment_smtp": "Servono per il recupero password via email. Se non li imposti, la password temporanea viene mostrata a schermo."
+  "comment_smtp": "Servono per il recupero password via email. from_name è il nome mostrato al destinatario (es. Software Gestionale AD). Se non li imposti, la password temporanea viene mostrata a schermo."
 }
