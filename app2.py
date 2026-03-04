@@ -1238,17 +1238,25 @@ if 'show_admin_section' not in st.session_state: st.session_state.show_admin_sec
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
-    # Blocco Utente e ruolo (radio: Amministratore / Utente)
+    # Blocco Utente / Licenza
     if _auth:
-        st.radio(
-            "Ruolo",
-            options=["Amministratore", "Utente"],
-            index=0 if _is_admin else 1,
-            key="sidebar_ruolo",
-            disabled=True,
-            horizontal=True,
-        )
-        st.caption(f"Accesso come **{st.session_state.logged_user}**")
+        if _is_admin:
+            st.radio(
+                "Ruolo",
+                options=["Amministratore", "Utente"],
+                index=0,
+                key="sidebar_ruolo",
+                disabled=True,
+                horizontal=True,
+            )
+            st.caption(f"Accesso come **{st.session_state.logged_user}**")
+        else:
+            _u = _auth.get_user_info(st.session_state.logged_user) if _auth else None
+            _nome = (_u.get("nome") or "").strip()
+            _cognome = (_u.get("cognome") or "").strip()
+            _nome_completo = f"{_nome} {_cognome}".strip() or st.session_state.logged_user
+            st.markdown("**Licenza**")
+            st.caption(f"Licenza concessa al Dott. **{_nome_completo}**")
         if st.button("🏠 Home", use_container_width=True, key="btn_home"):
             st.session_state.p_attivo = None
             st.session_state.m_modulo = False
@@ -1421,17 +1429,45 @@ d_form = df_p.iloc[idx_mod] if idx_mod is not None else p_r
 # Navbar (logo + breadcrumb) — sopra tutto il contenuto principale
 _render_navbar()
 
-# Banner aggiornamento: solo per utenti NON admin (l'admin è chi pubblica, non deve vedere l'avviso)
+# Banner aggiornamento: solo per utenti NON admin; scompare quando confermano in Utility → Verifica aggiornamenti
 _app_dir = os.path.dirname(os.path.abspath(__file__))
 _banner_ver, _banner_url = read_update_info(_app_dir, VERSION)
-_show_update_banner = (not (_auth and _is_admin)) and parse_version(_banner_ver) > parse_version(VERSION)
+
+def _read_update_ack(user_dir):
+    """Versione aggiornamento già letta/confermata dall'utente (solo online: niente download)."""
+    if not user_dir:
+        return "0"
+    p = os.path.join(user_dir, "update_ack.json")
+    if not os.path.exists(p):
+        return "0"
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return (d.get("version") or "0").strip()
+    except Exception:
+        return "0"
+
+def _write_update_ack(user_dir, version):
+    """Salva che l'utente ha confermato di aver letto le novità per questa versione."""
+    if not user_dir or not version:
+        return False
+    try:
+        os.makedirs(user_dir, exist_ok=True)
+        p = os.path.join(user_dir, "update_ack.json")
+        with open(p, "w", encoding="utf-8") as f:
+            json.dump({"version": version}, f, indent=2)
+        return True
+    except Exception:
+        return False
+
+_last_ack = _read_update_ack(_user_dir) if _auth and getattr(st.session_state, "logged_user", None) else "0"
+_show_update_banner = (not (_auth and _is_admin)) and parse_version(_banner_ver) > parse_version(_last_ack)
 if _show_update_banner:
-    _msg = f"**È disponibile un aggiornamento (versione {_banner_ver}).** "
-    if _banner_url:
-        _msg += f"Scaricalo qui: [Scarica aggiornamento]({_banner_url})"
-    else:
-        _msg += "Vai in **Utility → Verifica aggiornamenti** per maggiori informazioni."
-    st.warning(_msg, icon="⚠️")
+    st.warning(
+        f"**È disponibile una nuova versione ({_banner_ver}).** "
+        "Vai in **Utility → Verifica aggiornamenti** per leggere le novità e confermare.",
+        icon="⚠️"
+    )
 
 # Inizializza session state integratori se mancanti
 if 'edit_integr_idx' not in st.session_state: st.session_state.edit_integr_idx = None
@@ -1927,7 +1963,7 @@ if st.session_state.show_utility:
     # ── 6. GESTIONE VERSIONE (solo admin) ──
     if _tab == "versione" and _auth and _is_admin:
         st.markdown("#### 📌 Gestione versione e aggiornamenti (solo admin)")
-        st.markdown("Quando pubblichi una **nuova versione** dell’app (es. dopo aver creato un nuovo installabile): imposta qui il **numero di versione** che gli utenti devono vedere e l’**URL** da cui scaricare l’aggiornamento. Gli utenti vedranno l’avviso in cima alla pagina (o in **Verifica aggiornamenti** sotto) e potranno scaricare e installare la nuova versione.")
+        st.markdown("Quando pubblichi una **nuova versione** dell’app (es. dopo aver creato un nuovo installabile): imposta qui il **numero di versione** che gli utenti devono vedere e l’**URL** da cui scaricare l’aggiornamento. Gli utenti vedranno l’avviso in cima alla pagina (o in **Verifica aggiornamenti** sotto) e confermeranno di aver letto le novità (nessun download).")
         _pub_ver, _pub_url = read_update_info(app_dir, VERSION)
         _col_v, _col_u = st.columns(2)
         with _col_v:
@@ -1946,25 +1982,24 @@ if st.session_state.show_utility:
     # ── 7. CONTROLLA AGGIORNAMENTI ──
     if _tab == "aggiornamenti":
         st.markdown("#### 🔄 Verifica aggiornamenti")
+        _pub_ver, _pub_url = read_update_info(app_dir, VERSION)
         _changelog = read_changelog_for_version(app_dir, VERSION)
         if _changelog:
             with st.expander("📋 Novità in questa versione", expanded=True):
                 st.markdown(_changelog)
         if _auth and _is_admin:
-            st.caption("In qualità di **amministratore** gestisci la versione pubblicata nel tab Versione. Qui sotto puoi controllare cosa vedono gli utenti.")
+            st.caption("In qualità di **amministratore** gestisci la versione pubblicata nel tab Versione. Gli utenti vedranno l'avviso finché non confermano qui di aver letto le novità.")
         else:
-            st.markdown("Controlla se è disponibile una nuova versione dell'applicazione da installare.")
-        if st.button("Verifica aggiornamenti", key="btn_check_update"):
-            _pub_ver, _pub_url = read_update_info(app_dir, VERSION)
-            if parse_version(_pub_ver) > parse_version(VERSION):
-                st.success(f"✅ È disponibile una nuova versione: **{_pub_ver}**.")
-                if _pub_url:
-                    st.markdown(f"Scarica l’aggiornamento: [**Scarica aggiornamento**]({_pub_url})")
-                    st.link_button("⬇️ Scarica aggiornamento", _pub_url, type="primary", key="link_download_update")
-                else:
-                    st.info("L’amministratore non ha ancora impostato il link di download. Contattalo per ottenere l’aggiornamento.")
+            st.markdown("Qui puoi leggere le novità della versione in uso. Conferma di aver letto per far scomparire l'avviso in home.")
+            if parse_version(_pub_ver) > parse_version(_read_update_ack(_user_dir)):
+                if st.button("✅ Confermo, ho letto le novità", type="primary", key="btn_ack_update"):
+                    if _write_update_ack(_user_dir, _pub_ver):
+                        st.toast("Avviso aggiornamento rimosso.", icon="✅")
+                        st.rerun()
+                    else:
+                        st.error("Impossibile salvare.")
             else:
-                st.info(f"Sei aggiornato: versione **{VERSION}**.")
+                st.info(f"Hai già confermato le novità per la versione **{_pub_ver}**.")
 
     # ── 8. AMMINISTRAZIONE ──
     if _tab == "amministrazione" and _auth and _is_admin:

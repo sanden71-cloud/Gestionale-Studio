@@ -208,6 +208,14 @@ def get_all_users():
     return data.get("users", [])
 
 
+def get_user_info(username: str) -> dict | None:
+    """Restituisce il dict utente per username, o None."""
+    for u in get_all_users():
+        if (u.get("username") or "").lower() == (username or "").lower():
+            return u
+    return None
+
+
 def toggle_user_active(username: str) -> bool:
     """Attiva/disattiva un utente. Ritorna True se OK."""
     data = _load_users()
