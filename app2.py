@@ -399,7 +399,7 @@ if _auth:
                             st.success(msg_rec)
                             if temp_pwd:
                                 st.warning(f"**Password temporanea:** `{temp_pwd}` — usala per accedere, poi cambiala da Utility.")
-                            st.rerun()
+                            # Non fare rerun: così l'utente può leggere e copiare il messaggio (e la password se mostrata)
                         else:
                             st.error(msg_rec)
                     else:
