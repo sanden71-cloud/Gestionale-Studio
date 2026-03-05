@@ -344,6 +344,26 @@ if _auth is None:
 if _auth:
     ok_lic, msg_lic = _auth.check_license()
     if not ok_lic:
+        st.markdown("### 🔒 Inserisci chiave licenza")
+        st.caption("Per utilizzare l'app è necessaria una chiave licenza valida. Inseriscila qui sotto (o configurala in Utility → Amministrazione utenti → Configurazione).")
+        with st.form("form_licenza"):
+            _lic_input = st.text_input("Chiave licenza", placeholder="VLEKT-xxx-xxx-xxx oppure chiave fornita dall'amministratore", key="input_licenza")
+            if st.form_submit_button("Attiva licenza"):
+                if _lic_input and _lic_input.strip():
+                    _ok, _, _msg = _auth.validate_license(_lic_input.strip())
+                    if _ok:
+                        _cfg = _auth.get_config()
+                        _cfg["license_key"] = _lic_input.strip()
+                        _ok_save, _msg_save = _auth.save_config(_cfg)
+                        if _ok_save:
+                            st.success("Licenza attivata.")
+                            st.rerun()
+                        else:
+                            st.error(_msg_save)
+                    else:
+                        st.error(_msg)
+                else:
+                    st.warning("Inserisci la chiave licenza.")
         st.error(f"🔒 {msg_lic}")
         st.stop()
     _auth.ensure_admin_exists()
@@ -1262,8 +1282,10 @@ with st.sidebar:
                     st.caption(f"Licenza concessa al Dott. **{_nome_completo}** — Scade il **{_lic_exp}**")
                 else:
                     st.caption(f"Licenza concessa al Dott. **{_nome_completo}** — Senza scadenza")
+            elif os.environ.get("VLEKT_DEV") == "1":
+                st.caption(f"Modalità sviluppo (senza licenza)")
             else:
-                st.caption(f"Licenza concessa al Dott. **{_nome_completo}**")
+                st.caption(f"Dott. **{_nome_completo}** — Configura licenza in Utility → Configurazione")
         if st.button("🏠 Home", use_container_width=True, key="btn_home"):
             st.session_state.p_attivo = None
             st.session_state.m_modulo = False
@@ -1748,6 +1770,13 @@ if st.session_state.show_utility:
         st.session_state.show_utility = False
         st.session_state.show_admin_section = False
         st.rerun()
+
+    # Changelog in evidenza: mostra subito le novità della versione corrente
+    _app_dir = os.path.dirname(os.path.abspath(__file__))
+    _changelog_util = read_changelog_for_version(_app_dir, VERSION)
+    if _changelog_util:
+        with st.expander(f"📋 Novità versione {VERSION}", expanded=True):
+            st.markdown(_changelog_util)
 
     # Cambia la tua password: visibile a TUTTI gli utenti (non solo admin)
     _must_change = _auth.get_user_must_change_password(st.session_state.logged_user) if _auth else False

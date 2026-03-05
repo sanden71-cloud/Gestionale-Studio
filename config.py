@@ -1,7 +1,7 @@
 # --- Costanti e definizioni colonne (VLEKT PRO) ---
 
 # Versione app: MAJOR=breaking, MINOR=nuove funzionalità, PATCH=bugfix (dettagli in VERSIONING.md)
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 APP_NAME = "VLEKT PRO"
 
 # La versione che gli utenti vedono e l’URL di download si gestiscono da Utility (solo admin):

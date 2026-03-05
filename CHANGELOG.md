@@ -4,6 +4,13 @@ Questo file elenca le novità e i bug risolti per ogni versione. L'app mostra le
 
 ---
 
+## 1.1.1
+
+- **Licenza**: form di inserimento chiave quando manca (invece di solo blocco). Sidebar: mostra "Modalità sviluppo (senza licenza)" con VLEKT_DEV; "Configura licenza in Utility" se non configurata.
+- **Changelog**: mostrato in evidenza in cima alla pagina Utility (expander "Novità versione X.Y.Z"), non solo nel tab Aggiornamenti.
+
+---
+
 ## 1.1.0
 
 - **Gestione licenze**: l'amministratore può creare chiavi licenza univoche con scadenza opzionale (Utility → Amministrazione utenti → Gestione licenze). L'utente inserisce la chiave in Configurazione e vede in sidebar "Licenza scade il …" o "Licenza senza scadenza". Avviso quando la licenza scade entro 30 giorni.
