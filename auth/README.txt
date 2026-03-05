@@ -21,9 +21,9 @@ SVILUPPO LOCALE:
 - Primo accesso: utente "admin" / password "Admin123!" — cambiala subito.
 
 LICENZE (admin genera, utente inserisce):
-1. Admin: Utility → Amministrazione utenti → Gestione licenze. Genera chiavi con scadenza (data) o senza scadenza.
+1. Admin: Utility → Amministrazione utenti → tabella Utenti registrati. Per ogni utente: colonna Licenza → pulsante 📜 Genera. Genera chiavi con scadenza (data) o senza scadenza.
 2. L'admin fornisce la chiave all'utente (es. Dott. Rossi).
-3. L'utente inserisce la chiave in Utility → Configurazione → Chiave licenza (o variabile VLEKT_LICENSE_KEY).
+3. L'utente inserisce la chiave al primo accesso (insieme a user e password) oppure in Utility → Configurazione (Chiave licenza).
 4. L'utente vede in sidebar: "Licenza scade il 31/12/2025" o "Licenza senza scadenza".
 - Le licenze generate sono salvate in auth/licenses.json (database licenze).
 - Formato chiave: VLEKT-{uuid}-{scadenza}-{firma}. Chiavi legacy (>=8 caratteri) ancora valide.

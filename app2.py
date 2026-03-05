@@ -1571,7 +1571,7 @@ if st.session_state.show_utility:
             _cfg = _auth.get_config()
             with st.form("admin_config_form"):
                 st.markdown("**Licenza**")
-                lic = st.text_input("Chiave licenza", value=_cfg.get("license_key") or "", type="password", placeholder="VLEKT-xxx-xxx o chiave legacy (genera da Gestione licenze)")
+                lic = st.text_input("Chiave licenza", value=_cfg.get("license_key") or "", type="password", placeholder="VLEKT-xxx-xxx o chiave legacy (genera dalla tabella utenti)")
                 st.markdown("**SMTP (recupero password)**")
                 smtp_host = st.text_input("Host SMTP", value=_cfg.get("smtp_host") or "smtp.gmail.com", placeholder="es. smtp.gmail.com")
                 smtp_port = st.number_input("Porta SMTP", min_value=1, max_value=65535, value=int(_cfg.get("smtp_port") or 587), step=1)
@@ -1601,41 +1601,10 @@ if st.session_state.show_utility:
                         st.rerun()
                     else:
                         st.error(msg_cfg)
-        # Gestione licenze: crea chiavi univoche con scadenza opzionale
-        with st.expander("📜 Gestione licenze", expanded=False):
-            st.caption("Genera chiavi licenza da fornire agli utenti. L'utente inserisce la chiave in Utility → Configurazione (Chiave licenza).")
-            with st.form("admin_crea_licenza"):
-                licenza_perpetua = st.checkbox("Licenza senza scadenza", value=False, key="lic_perpetua")
-                licenza_scadenza = st.date_input("Scadenza (ignorata se selezionata 'Licenza senza scadenza')", key="lic_exp_date")
-                licenza_note = st.text_input("Note (opzionale)", placeholder="es. Dott. Rossi", key="lic_notes")
-                if st.form_submit_button("🔑 Genera nuova licenza"):
-                    exp_str = None if licenza_perpetua else licenza_scadenza.strftime("%Y-%m-%d")
-                    try:
-                        new_key = _auth.generate_license(expires_at=exp_str, notes=licenza_note)
-                        st.session_state.last_generated_license = new_key
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Errore: {e}")
-            if st.session_state.get("last_generated_license"):
-                st.success("Licenza generata. Copia la chiave e forniscila all'utente:")
-                st.code(st.session_state.last_generated_license, language=None)
-                st.caption("L'utente deve inserirla in Utility → Amministrazione utenti → Configurazione → Chiave licenza")
-                if st.button("Chiudi", key="btn_close_lic"):
-                    st.session_state.last_generated_license = None
-                    st.rerun()
-            st.markdown("---")
-            st.markdown("**Licenze generate**")
-            _all_lic = _auth.get_all_licenses()
-            if not _all_lic:
-                st.caption("Nessuna licenza ancora generata.")
-            else:
-                for _l in reversed(_all_lic[-20:]):
-                    _k = _l.get("key", "")[:40] + "..." if len(_l.get("key", "")) > 40 else _l.get("key", "")
-                    _e = _l.get("expires_at") or "Senza scadenza"
-                    _n = _l.get("notes") or ""
-                    st.caption(f"• {_e} — {_n or _k}")
         if 'admin_reset_user' not in st.session_state:
             st.session_state.admin_reset_user = None
+        if 'admin_gen_lic_user' not in st.session_state:
+            st.session_state.admin_gen_lic_user = None  # (username, nome_cognome)
         if 'set_email_user' not in st.session_state:
             st.session_state.set_email_user = None
         with st.expander("🔐 Cambia la tua password", expanded=False):
@@ -1663,18 +1632,28 @@ if st.session_state.show_utility:
                                 st.error(msg)
         st.markdown("---")
         st.markdown("#### 👥 Utenti registrati")
-        st.caption("Attiva/disattiva accesso, reimposta password, imposta email (recupero password).")
+        st.caption("Attiva/disattiva accesso, licenze, password, email. Locale e online: stessa interfaccia.")
         users = _auth.get_all_users()
+        _all_lic = _auth.get_all_licenses() if users else []
+        def _licenze_per_utente(nome_cognome):
+            nc = (nome_cognome or "").strip().lower()
+            out = []
+            for L in reversed(_all_lic):
+                n = (L.get("notes") or "").strip().lower()
+                if nc and (nc in n or n in nc):
+                    out.append(L)
+            return out[:3]  # ultime 3
         if not users:
             st.info("Nessun utente. Crea il primo dalla sezione **Crea nuovo utente** qui sotto.")
         else:
-            _hh = st.columns([2, 1.2, 2, 0.7, 0.7, 1.8])
+            _hh = st.columns([2, 1.2, 2, 0.6, 0.6, 1.0, 1.5])
             _hh[0].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Nome</div>", unsafe_allow_html=True)
             _hh[1].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Username</div>", unsafe_allow_html=True)
             _hh[2].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Email</div>", unsafe_allow_html=True)
             _hh[3].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Data</div>", unsafe_allow_html=True)
             _hh[4].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Stato</div>", unsafe_allow_html=True)
-            _hh[5].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Azioni</div>", unsafe_allow_html=True)
+            _hh[5].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Licenza</div>", unsafe_allow_html=True)
+            _hh[6].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Azioni</div>", unsafe_allow_html=True)
             for u in users:
                 uname = u.get('username', '')
                 attivo = u.get('attivo', True)
@@ -1683,13 +1662,31 @@ if st.session_state.show_utility:
                 created = (u.get('created_at') or '')[:10]
                 nome_cognome = f"{u.get('cognome', '')} {u.get('nome', '')}".strip() or uname
                 stato = "admin" if is_adm else ("🟢" if attivo else "🔴")
-                c0, c1, c2, c3, c4, c5 = st.columns([2, 1.2, 2, 0.7, 0.7, 1.8])
+                licenze_u = _licenze_per_utente(nome_cognome) if not is_adm else []
+                lic_txt = "—"
+                if licenze_u:
+                    ult = licenze_u[0]
+                    lic_txt = ult.get("expires_at") or "∞"
+                    if lic_txt != "∞":
+                        try:
+                            lic_txt = lic_txt[-2:] + "/" + lic_txt[5:7] + "/" + lic_txt[:4]
+                        except Exception:
+                            pass
+                c0, c1, c2, c3, c4, c5, c6 = st.columns([2, 1.2, 2, 0.6, 0.6, 1.0, 1.5])
                 c0.markdown(f"<div style='font-size:12px;'>{nome_cognome}</div>", unsafe_allow_html=True)
                 c1.markdown(f"<div style='font-size:11px;color:#64748b;'>@{uname}</div>", unsafe_allow_html=True)
                 c2.markdown(f"<div style='font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' title='{user_email}'>{user_email}</div>", unsafe_allow_html=True)
                 c3.markdown(f"<div style='font-size:10px;color:#94a3b8;'>{created}</div>", unsafe_allow_html=True)
                 c4.markdown(f"<div style='font-size:11px;'>{stato}</div>", unsafe_allow_html=True)
                 with c5:
+                    if is_adm:
+                        st.caption("—")
+                    else:
+                        st.caption(lic_txt)
+                        if st.button("📜", key=f"lic_{uname}", use_container_width=True, help="Genera licenza"):
+                            st.session_state.admin_gen_lic_user = (uname, nome_cognome)
+                            st.rerun()
+                with c6:
                     _a, _b, _c = st.columns(3)
                     with _a:
                         if st.button("✉️", key=f"btn_email_{uname}", use_container_width=True, help="Email"):
@@ -1707,6 +1704,35 @@ if st.session_state.show_utility:
                             if st.button("🔑", key=f"reset_{uname}", use_container_width=True, help="Nuova password"):
                                 st.session_state.admin_reset_user = uname
                                 st.rerun()
+        if st.session_state.get("last_generated_license"):
+            _k, _n = st.session_state.last_generated_license
+            st.success(f"Licenza generata per **{_n}**. Copia la chiave e forniscila all'utente:")
+            st.code(_k, language=None)
+            st.caption("L'utente inserisce la chiave al primo accesso (insieme a user e password).")
+            if st.button("Chiudi", key="btn_close_lic"):
+                st.session_state.last_generated_license = None
+                st.rerun()
+        elif st.session_state.admin_gen_lic_user:
+            _gen_uname, _gen_nome = st.session_state.admin_gen_lic_user
+            st.markdown(f"##### 📜 Genera licenza per **{_gen_nome}** (@{_gen_uname})")
+            with st.form("form_gen_licenza"):
+                lic_perpetua = st.checkbox("Licenza senza scadenza", value=True, key="lic_perpetua")
+                lic_scad = st.date_input("Scadenza (usata solo se non perpetua)", key="lic_exp_d")
+                _g1, _g2 = st.columns(2)
+                with _g1:
+                    if st.form_submit_button("Genera licenza"):
+                        exp_str = None if lic_perpetua else lic_scad.strftime("%Y-%m-%d")
+                        try:
+                            new_key = _auth.generate_license(expires_at=exp_str, notes=_gen_nome)
+                            st.session_state.last_generated_license = (new_key, _gen_nome)
+                            st.session_state.admin_gen_lic_user = None
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Errore: {e}")
+                with _g2:
+                    if st.form_submit_button("Annulla"):
+                        st.session_state.admin_gen_lic_user = None
+                        st.rerun()
         if st.session_state.admin_reset_user:
             st.markdown(f"##### 🔑 Imposta nuova password per **{st.session_state.admin_reset_user}**")
             with st.form("form_reset_pwd"):
