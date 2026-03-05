@@ -294,7 +294,9 @@ def get_user_must_change_password(username: str) -> bool:
 
 
 def reset_admin_password_to_default() -> tuple[bool, str]:
-    """Reimposta la password dell'utente admin a Admin123!. Utile in sviluppo se non si ricorda la password."""
+    """Reimposta la password dell'utente admin a Admin123!. Consentito solo con VLEKT_DEV=1 (sviluppo)."""
+    if os.environ.get("VLEKT_DEV") != "1":
+        return False, "Operazione consentita solo in ambiente di sviluppo (VLEKT_DEV=1)."
     data = _load_users()
     for u in data.get("users", []):
         if u.get("is_admin"):

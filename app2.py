@@ -39,6 +39,9 @@ from config import (
     COLS_PAZ, COLS_ALI, COLS_DIETA, COLS_INTEGR, COLS_PRESCR, COLS_PROT,
     PDF_PIANI, PDF_NOME_CFG,
 )
+
+# Etichetta unica per il pulsante Utility in sidebar: identica in locale e online
+SIDEBAR_UTILITY_BTN = "🛠️ Utility (Backup, Admin, Statistiche)"
 from vlekt_utils import (
     to_f, calcola_eta, calcola_eta_anni_mesi, calcola_info_visite, _norm_data_visita,
     calcola_stato_bmi, calcola_bmr, safe, _v, colora_pasti, parse_version, read_update_info,
@@ -386,10 +389,7 @@ if _auth:
                                 else:
                                     st.error(err)
                                     if u and str(u).strip().lower() == "admin" and err == "Password non corretta.":
-                                        if os.environ.get("VLEKT_DEV") == "1":
-                                            st.session_state.show_reset_admin_btn = True
-                                        else:
-                                            st.caption("Se sei in locale e non ricordi la password: avvia l'app con **VLEKT_DEV=1** (es. `VLEKT_DEV=1 streamlit run app2.py`) e qui comparirà un pulsante per reimpostare la password admin.")
+                                        st.session_state.show_reset_admin_btn = True
                                     else:
                                         st.session_state.show_reset_admin_btn = False
                             elif not u or not p:
@@ -403,17 +403,14 @@ if _auth:
                     else:
                         st.error(err)
                         if u and str(u).strip().lower() == "admin" and err == "Password non corretta.":
-                            if os.environ.get("VLEKT_DEV") == "1":
-                                st.session_state.show_reset_admin_btn = True
-                            else:
-                                st.caption("Se sei in locale e non ricordi la password: avvia l'app con **VLEKT_DEV=1** (es. `VLEKT_DEV=1 streamlit run app2.py`) e qui comparirà un pulsante per reimpostare la password admin.")
+                            st.session_state.show_reset_admin_btn = True
                         else:
                             st.session_state.show_reset_admin_btn = False
                 else:
                     st.warning("Inserisci utente e password.")
-        # Pulsante reimposta password admin (solo sviluppo): fuori dal form perché st.button non è ammesso in st.form
-        if st.session_state.get("show_reset_admin_btn") and os.environ.get("VLEKT_DEV") == "1":
-            if st.button("Reimposta password admin a Admin123! (solo sviluppo)", type="secondary", key="btn_reset_admin_pwd"):
+        # Pulsante reimposta password admin: stesso pulsante in locale e online; l'azione è consentita solo in sviluppo (VLEKT_DEV=1)
+        if st.session_state.get("show_reset_admin_btn"):
+            if st.button("Reimposta password admin a predefinita", type="secondary", key="btn_reset_admin_pwd"):
                 ok_reset, msg_reset = _auth.reset_admin_password_to_default()
                 if ok_reset:
                     st.success(msg_reset)
@@ -435,9 +432,11 @@ if _auth:
                             # Non fare rerun: così l'utente può leggere e copiare il messaggio (e la password se mostrata)
                         else:
                             st.error(msg_rec)
+                            _path, _n = _auth.get_users_file_debug_info()
                             if os.environ.get("VLEKT_DEV") == "1":
-                                _path, _n = _auth.get_users_file_debug_info()
                                 st.caption(f"🔧 Debug: file utenti = `{_path}` — utenti caricati = {_n}")
+                            else:
+                                st.caption("🔧 Dettagli tecnici disponibili in ambiente di sviluppo.")
                     else:
                         st.warning("Inserisci email o username.")
         st.stop()
@@ -1410,7 +1409,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.markdown("<p class='sidebar-section'>🔧 Utility</p>", unsafe_allow_html=True)
-    if st.button("🛠️ Backup, Restore, Statistiche", use_container_width=True):
+    if st.button(SIDEBAR_UTILITY_BTN, use_container_width=True, key="btn_sidebar_utility"):
         st.session_state.show_utility = True
         st.session_state.show_db_alimenti = False
         st.session_state.show_db_integratori = False
