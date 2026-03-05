@@ -343,29 +343,6 @@ if _auth is None:
 
 if _auth:
     ok_lic, msg_lic = _auth.check_license()
-    if not ok_lic:
-        st.markdown("### 🔒 Inserisci chiave licenza")
-        st.caption("Per utilizzare l'app è necessaria una chiave licenza valida. Inseriscila qui sotto (o configurala in Utility → Amministrazione utenti → Configurazione).")
-        with st.form("form_licenza"):
-            _lic_input = st.text_input("Chiave licenza", placeholder="VLEKT-xxx-xxx-xxx oppure chiave fornita dall'amministratore", key="input_licenza")
-            if st.form_submit_button("Attiva licenza"):
-                if _lic_input and _lic_input.strip():
-                    _ok, _, _msg = _auth.validate_license(_lic_input.strip())
-                    if _ok:
-                        _cfg = _auth.get_config()
-                        _cfg["license_key"] = _lic_input.strip()
-                        _ok_save, _msg_save = _auth.save_config(_cfg)
-                        if _ok_save:
-                            st.success("Licenza attivata.")
-                            st.rerun()
-                        else:
-                            st.error(_msg_save)
-                    else:
-                        st.error(_msg)
-                else:
-                    st.warning("Inserisci la chiave licenza.")
-        st.error(f"🔒 {msg_lic}")
-        st.stop()
     _auth.ensure_admin_exists()
 
     if 'logged_user' not in st.session_state:
@@ -376,11 +353,48 @@ if _auth:
     if st.session_state.logged_user is None:
         st.markdown("### 🔐 Accesso")
         st.info("Solo gli utenti **attivati dall'amministratore** possono accedere. Se il tuo account non è ancora attivo, contatta l'amministratore.")
+        # Licenza al primo login: se manca, mostrata insieme a user/password
+        _show_lic_field = not ok_lic
         with st.form("login_form"):
+            if _show_lic_field:
+                st.caption("Al primo accesso inserisci anche la chiave licenza.")
+                _lic_input = st.text_input("Chiave licenza", placeholder="VLEKT-xxx-xxx-xxx oppure chiave fornita dall'amministratore", key="input_licenza")
             u = st.text_input("Utente", placeholder="username")
             p = st.text_input("Password", type="password", placeholder="password")
             if st.form_submit_button("Accedi"):
-                if u and p and _auth:
+                # Se manca la licenza, valida e salva prima del login
+                if _show_lic_field:
+                    _lic_val = (_lic_input or "").strip()
+                    if not _lic_val:
+                        st.error("Inserisci la chiave licenza per continuare.")
+                    else:
+                        _ok, _, _msg = _auth.validate_license(_lic_val)
+                        if not _ok:
+                            st.error(_msg)
+                        else:
+                            _cfg = _auth.get_config()
+                            _cfg["license_key"] = _lic_val
+                            _ok_save, _msg_save = _auth.save_config(_cfg)
+                            if not _ok_save:
+                                st.error(_msg_save)
+                            elif u and p and _auth:
+                                ok, err = _auth.verify_login(u, p)
+                                if ok:
+                                    st.session_state.logged_user = u.strip().lower()
+                                    st.session_state.show_admin = False
+                                    st.rerun()
+                                else:
+                                    st.error(err)
+                                    if u and str(u).strip().lower() == "admin" and err == "Password non corretta.":
+                                        if os.environ.get("VLEKT_DEV") == "1":
+                                            st.session_state.show_reset_admin_btn = True
+                                        else:
+                                            st.caption("Se sei in locale e non ricordi la password: avvia l'app con **VLEKT_DEV=1** (es. `VLEKT_DEV=1 streamlit run app2.py`) e qui comparirà un pulsante per reimpostare la password admin.")
+                                    else:
+                                        st.session_state.show_reset_admin_btn = False
+                            elif not u or not p:
+                                st.warning("Inserisci utente e password.")
+                elif u and p and _auth:
                     ok, err = _auth.verify_login(u, p)
                     if ok:
                         st.session_state.logged_user = u.strip().lower()
@@ -388,7 +402,6 @@ if _auth:
                         st.rerun()
                     else:
                         st.error(err)
-                        # Se password errata per admin: in locale con VLEKT_DEV=1 mostra pulsante reset sotto il form
                         if u and str(u).strip().lower() == "admin" and err == "Password non corretta.":
                             if os.environ.get("VLEKT_DEV") == "1":
                                 st.session_state.show_reset_admin_btn = True
@@ -1282,10 +1295,9 @@ with st.sidebar:
                     st.caption(f"Licenza concessa al Dott. **{_nome_completo}** — Scade il **{_lic_exp}**")
                 else:
                     st.caption(f"Licenza concessa al Dott. **{_nome_completo}** — Senza scadenza")
-            elif os.environ.get("VLEKT_DEV") == "1":
-                st.caption(f"Modalità sviluppo (senza licenza)")
             else:
-                st.caption(f"Dott. **{_nome_completo}** — Configura licenza in Utility → Configurazione")
+                # Non mostrare "Modalità sviluppo (senza licenza)" per utenti normali: stesso messaggio neutro
+                st.caption(f"Licenza concessa al Dott. **{_nome_completo}**")
         if st.button("🏠 Home", use_container_width=True, key="btn_home"):
             st.session_state.p_attivo = None
             st.session_state.m_modulo = False
