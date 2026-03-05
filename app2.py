@@ -1588,20 +1588,29 @@ if st.session_state.show_utility:
                     out.append(L)
             return out[:3]
 
+        # Allineamento locale ↔ online: hint se sync attivo
+        _n_users = len(users)
+        if os.environ.get("VLEKT_SECRET_KEY", "").strip():
+            st.caption(f"Utenti caricati: **{_n_users}**. Per allineare locale e online: fai commit e push di `users.enc` e `licenses.enc`, poi sul deploy fai pull e riavvia.")
+
         if not users:
             st.info("Nessun utente. Crea il primo dalla sezione **Crea nuovo utente** qui sotto.")
         else:
-            # Stile tabella: font 15px, intestazioni 14px
-            _h_style = "font-size:14px;font-weight:700;color:#475569;margin-bottom:4px;"
-            _c_style = "font-size:15px;color:#1e293b;"
-            _row = st.columns([2.2, 1.4, 2.2, 0.8, 0.8, 1.2, 2.2])
-            _row[0].markdown(f"<div class='admin-th' style='{_h_style}'>Nome</div>", unsafe_allow_html=True)
-            _row[1].markdown(f"<div class='admin-th' style='{_h_style}'>Username</div>", unsafe_allow_html=True)
-            _row[2].markdown(f"<div class='admin-th' style='{_h_style}'>Email</div>", unsafe_allow_html=True)
-            _row[3].markdown(f"<div class='admin-th' style='{_h_style}'>Data</div>", unsafe_allow_html=True)
-            _row[4].markdown(f"<div class='admin-th' style='{_h_style}'>Stato</div>", unsafe_allow_html=True)
-            _row[5].markdown(f"<div class='admin-th' style='{_h_style}'>Licenza</div>", unsafe_allow_html=True)
-            _row[6].markdown(f"<div class='admin-th' style='{_h_style}'>Azioni</div>", unsafe_allow_html=True)
+            # Tabella tipo Excel: stesse proporzioni per intestazione e ogni riga
+            _cols_w = [2.5, 1.3, 2.5, 0.9, 1.0, 2.5, 2.8]
+            _h_style = "font-size:14px;font-weight:700;color:#475569;"
+            _c_style = "font-size:15px;color:#1e293b;line-height:1.4;"
+            _header = st.columns(_cols_w)
+            _header[0].markdown(f"<div style='{_h_style}'>Nome</div>", unsafe_allow_html=True)
+            _header[1].markdown(f"<div style='{_h_style}'>Username</div>", unsafe_allow_html=True)
+            _header[2].markdown(f"<div style='{_h_style}'>Email</div>", unsafe_allow_html=True)
+            _header[3].markdown(f"<div style='{_h_style}'>Data</div>", unsafe_allow_html=True)
+            _header[4].markdown(f"<div style='{_h_style}'>Stato</div>", unsafe_allow_html=True)
+            _header[5].markdown(f"<div style='{_h_style}'>Licenza</div>", unsafe_allow_html=True)
+            _header[6].markdown(f"<div style='{_h_style}'>Azioni</div>", unsafe_allow_html=True)
+
+            _last_lic = st.session_state.get("last_generated_license")  # (key, nome_cognome) o None
+
             for u in users:
                 uname = u.get('username', '')
                 attivo = u.get('attivo', True)
@@ -1620,47 +1629,50 @@ if st.session_state.show_utility:
                             lic_txt = lic_txt[-2:] + "/" + lic_txt[5:7] + "/" + lic_txt[:4]
                         except Exception:
                             pass
-                r0, r1, r2, r3, r4, r5, r6 = st.columns([2.2, 1.4, 2.2, 0.8, 0.8, 1.2, 2.2])
+                r0, r1, r2, r3, r4, r5, r6 = st.columns(_cols_w)
                 r0.markdown(f"<div style='{_c_style}'><strong>{nome_cognome}</strong></div>", unsafe_allow_html=True)
                 r1.markdown(f"<div style='{_c_style}color:#64748b;'>{uname}</div>", unsafe_allow_html=True)
-                r2.markdown(f"<div style='{_c_style}color:#64748b;' title='{user_email}'>{user_email}</div>", unsafe_allow_html=True)
+                r2.markdown(f"<div style='{_c_style}color:#64748b;'>{user_email}</div>", unsafe_allow_html=True)
                 r3.markdown(f"<div style='font-size:14px;color:#94a3b8;'>{created}</div>", unsafe_allow_html=True)
                 r4.markdown(f"<div style='{_c_style}'>{stato}</div>", unsafe_allow_html=True)
                 with r5:
                     if is_adm:
                         st.markdown(f"<div style='{_c_style}color:#94a3b8;'>—</div>", unsafe_allow_html=True)
+                    elif _last_lic and (_last_lic[1].strip().lower() == nome_cognome.strip().lower()):
+                        _key = _last_lic[0]
+                        _ck, _cb = st.columns([3, 1])
+                        with _ck:
+                            st.code(_key, language=None)
+                        with _cb:
+                            if st.button("Chiudi", key=f"close_lic_{uname}", use_container_width=True):
+                                st.session_state.last_generated_license = None
+                                st.rerun()
                     else:
-                        st.markdown(f"<div style='{_c_style}'>{lic_txt}</div>", unsafe_allow_html=True)
-                        if st.button("Genera licenza", key=f"lic_{uname}", use_container_width=True):
-                            st.session_state.admin_gen_lic_user = (uname, nome_cognome)
-                            st.rerun()
+                        _lc, _lb = st.columns([1.2, 1])
+                        _lc.markdown(f"<div style='{_c_style}'>{lic_txt}</div>", unsafe_allow_html=True)
+                        with _lb:
+                            if st.button("Genera", key=f"lic_{uname}", use_container_width=True):
+                                st.session_state.admin_gen_lic_user = (uname, nome_cognome)
+                                st.rerun()
                 with r6:
-                    col_a, col_b, col_c = st.columns(3)
-                    with col_a:
-                        if st.button("Email", key=f"btn_email_{uname}", use_container_width=True):
+                    _a, _b, _c = st.columns(3)
+                    with _a:
+                        if st.button("✉️ Email", key=f"btn_email_{uname}", use_container_width=True):
                             st.session_state.set_email_user = uname
                             st.rerun()
-                    with col_b:
+                    with _b:
                         if not is_adm:
                             lab = "Disattiva" if attivo else "Attiva"
                             if st.button(lab, key=f"toggle_{uname}", use_container_width=True):
                                 _auth.toggle_user_active(uname)
                                 st.toast("Stato aggiornato.", icon="✅")
                                 st.rerun()
-                    with col_c:
+                    with _c:
                         if not is_adm and uname != st.session_state.logged_user:
-                            if st.button("Password", key=f"reset_{uname}", use_container_width=True):
+                            if st.button("🔑 Pwd", key=f"reset_{uname}", use_container_width=True):
                                 st.session_state.admin_reset_user = uname
                                 st.rerun()
-        if st.session_state.get("last_generated_license"):
-            _k, _n = st.session_state.last_generated_license
-            st.success(f"Licenza generata per **{_n}**. Copia la chiave e forniscila all'utente:")
-            st.code(_k, language=None)
-            st.caption("L'utente inserisce la chiave al primo accesso (insieme a user e password).")
-            if st.button("Chiudi", key="btn_close_lic"):
-                st.session_state.last_generated_license = None
-                st.rerun()
-        elif st.session_state.admin_gen_lic_user:
+        if not st.session_state.get("last_generated_license") and st.session_state.admin_gen_lic_user:
             _gen_uname, _gen_nome = st.session_state.admin_gen_lic_user
             st.markdown(f"##### 📜 Genera licenza per **{_gen_nome}** (@{_gen_uname})")
             with st.form("form_gen_licenza"):
