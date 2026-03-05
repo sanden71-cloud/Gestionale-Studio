@@ -1563,77 +1563,22 @@ if st.session_state.show_utility:
             st.session_state.admin_reset_user = None
             st.rerun()
         st.markdown("---")
-        # Configurazione licenza e SMTP (solo admin)
-        with st.expander("⚙️ Configurazione (licenza e SMTP)", expanded=True):
-            if os.environ.get("VLEKT_SECRET_KEY", "").strip():
-                st.info("🔄 **Sync attivo:** utenti e config sono salvati cifrati (users.enc, config.enc). Puoi committarli su Git per avere gli stessi dati in locale e in deploy.")
-            _cfg = _auth.get_config()
-            with st.form("admin_config_form"):
-                st.markdown("**Licenza**")
-                lic = st.text_input("Chiave licenza", value=_cfg.get("license_key") or "", type="password", placeholder="VLEKT-xxx-xxx o chiave legacy (genera dalla tabella utenti)")
-                st.markdown("**SMTP (recupero password)**")
-                smtp_host = st.text_input("Host SMTP", value=_cfg.get("smtp_host") or "smtp.gmail.com", placeholder="es. smtp.gmail.com")
-                smtp_port = st.number_input("Porta SMTP", min_value=1, max_value=65535, value=int(_cfg.get("smtp_port") or 587), step=1)
-                smtp_user = st.text_input("Utente SMTP", value=_cfg.get("smtp_user") or "", placeholder="email o username")
-                smtp_password = st.text_input("Password SMTP", value="", type="password", placeholder="•••••••• (lascia vuoto per non modificare)")
-                smtp_use_tls = st.checkbox("Usa TLS", value=bool(_cfg.get("smtp_use_tls", True)))
-                from_name = st.text_input("Nome mittente (mostrato al destinatario)", value=_cfg.get("from_name") or "", placeholder="es. Software Gestionale AD")
-                from_email = st.text_input("Indirizzo mittente (From)", value=_cfg.get("from_email") or "", placeholder="es. noreply@tuodominio.it")
-                if st.form_submit_button("Salva configurazione"):
-                    # Mantieni password esistente se lasciata vuota
-                    pwd_final = _cfg.get("smtp_password") or ""
-                    if (smtp_password or "").strip():
-                        pwd_final = smtp_password
-                    data = {
-                        "license_key": (lic or "").strip(),
-                        "smtp_host": (smtp_host or "").strip(),
-                        "smtp_port": smtp_port,
-                        "smtp_user": (smtp_user or "").strip(),
-                        "smtp_password": pwd_final,
-                        "smtp_use_tls": smtp_use_tls,
-                        "from_name": (from_name or "").strip(),
-                        "from_email": (from_email or "").strip(),
-                    }
-                    ok_cfg, msg_cfg = _auth.save_config(data)
-                    if ok_cfg:
-                        st.toast(msg_cfg, icon="✅")
-                        st.rerun()
-                    else:
-                        st.error(msg_cfg)
+
         if 'admin_reset_user' not in st.session_state:
             st.session_state.admin_reset_user = None
         if 'admin_gen_lic_user' not in st.session_state:
-            st.session_state.admin_gen_lic_user = None  # (username, nome_cognome)
+            st.session_state.admin_gen_lic_user = None
         if 'set_email_user' not in st.session_state:
             st.session_state.set_email_user = None
-        with st.expander("🔐 Cambia la tua password", expanded=False):
-            with st.form("admin_cambia_pwd"):
-                pwd_attuale = st.text_input("Password attuale", type="password", autocomplete="current-password")
-                pwd_nuova = st.text_input("Nuova password", type="password")
-                pwd_ripeti = st.text_input("Ripeti nuova password", type="password")
-                if st.form_submit_button("Aggiorna password"):
-                    if not pwd_attuale or not pwd_nuova:
-                        st.error("Compila tutti i campi.")
-                    elif pwd_nuova != pwd_ripeti:
-                        st.error("Le password non coincidono.")
-                    elif len(pwd_nuova) < 6:
-                        st.error("La password deve essere di almeno 6 caratteri.")
-                    else:
-                        ok_ver, _ = _auth.verify_login(st.session_state.logged_user, (pwd_attuale or "").strip())
-                        if not ok_ver:
-                            st.error("Password attuale non corretta.")
-                        else:
-                            ok, msg = _auth.change_password(st.session_state.logged_user, pwd_nuova)
-                            if ok:
-                                st.toast(msg, icon="✅")
-                                st.rerun()
-                            else:
-                                st.error(msg)
-        st.markdown("---")
-        st.markdown("#### 👥 Utenti registrati")
-        st.caption("Attiva/disattiva accesso, licenze, password, email. Locale e online: stessa interfaccia.")
+
+        # ── SEZIONE PRINCIPALE: Utenti e licenze (in cima, font leggibili) ──
+        st.markdown("### 👥 Utenti e licenze")
+        st.markdown("Gestisci utenti, attiva/disattiva accesso, genera licenze, imposta email e password.")
+        if os.environ.get("VLEKT_SECRET_KEY", "").strip():
+            st.info("🔄 **Sync attivo:** utenti, config e licenze sono salvati cifrati (users.enc, config.enc, licenses.enc). Committali su Git per avere gli stessi dati in locale e online.")
         users = _auth.get_all_users()
         _all_lic = _auth.get_all_licenses() if users else []
+
         def _licenze_per_utente(nome_cognome):
             nc = (nome_cognome or "").strip().lower()
             out = []
@@ -1641,66 +1586,70 @@ if st.session_state.show_utility:
                 n = (L.get("notes") or "").strip().lower()
                 if nc and (nc in n or n in nc):
                     out.append(L)
-            return out[:3]  # ultime 3
+            return out[:3]
+
         if not users:
             st.info("Nessun utente. Crea il primo dalla sezione **Crea nuovo utente** qui sotto.")
         else:
-            _hh = st.columns([2, 1.2, 2, 0.6, 0.6, 1.0, 1.5])
-            _hh[0].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Nome</div>", unsafe_allow_html=True)
-            _hh[1].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Username</div>", unsafe_allow_html=True)
-            _hh[2].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Email</div>", unsafe_allow_html=True)
-            _hh[3].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Data</div>", unsafe_allow_html=True)
-            _hh[4].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Stato</div>", unsafe_allow_html=True)
-            _hh[5].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Licenza</div>", unsafe_allow_html=True)
-            _hh[6].markdown("<div style='font-size:11px;font-weight:700;color:#64748b;'>Azioni</div>", unsafe_allow_html=True)
+            # Stile tabella: font 15px, intestazioni 14px
+            _h_style = "font-size:14px;font-weight:700;color:#475569;margin-bottom:4px;"
+            _c_style = "font-size:15px;color:#1e293b;"
+            _row = st.columns([2.2, 1.4, 2.2, 0.8, 0.8, 1.2, 2.2])
+            _row[0].markdown(f"<div class='admin-th' style='{_h_style}'>Nome</div>", unsafe_allow_html=True)
+            _row[1].markdown(f"<div class='admin-th' style='{_h_style}'>Username</div>", unsafe_allow_html=True)
+            _row[2].markdown(f"<div class='admin-th' style='{_h_style}'>Email</div>", unsafe_allow_html=True)
+            _row[3].markdown(f"<div class='admin-th' style='{_h_style}'>Data</div>", unsafe_allow_html=True)
+            _row[4].markdown(f"<div class='admin-th' style='{_h_style}'>Stato</div>", unsafe_allow_html=True)
+            _row[5].markdown(f"<div class='admin-th' style='{_h_style}'>Licenza</div>", unsafe_allow_html=True)
+            _row[6].markdown(f"<div class='admin-th' style='{_h_style}'>Azioni</div>", unsafe_allow_html=True)
             for u in users:
                 uname = u.get('username', '')
                 attivo = u.get('attivo', True)
                 is_adm = u.get('is_admin', False)
-                user_email = (u.get('email') or '').strip() or '—'
+                user_email = (u.get('email') or '').strip() or "—"
                 created = (u.get('created_at') or '')[:10]
                 nome_cognome = f"{u.get('cognome', '')} {u.get('nome', '')}".strip() or uname
-                stato = "admin" if is_adm else ("🟢" if attivo else "🔴")
+                stato = "Admin" if is_adm else ("Attivo" if attivo else "Disattivo")
                 licenze_u = _licenze_per_utente(nome_cognome) if not is_adm else []
                 lic_txt = "—"
                 if licenze_u:
                     ult = licenze_u[0]
-                    lic_txt = ult.get("expires_at") or "∞"
-                    if lic_txt != "∞":
+                    lic_txt = ult.get("expires_at") or "Senza scadenza"
+                    if lic_txt != "Senza scadenza":
                         try:
                             lic_txt = lic_txt[-2:] + "/" + lic_txt[5:7] + "/" + lic_txt[:4]
                         except Exception:
                             pass
-                c0, c1, c2, c3, c4, c5, c6 = st.columns([2, 1.2, 2, 0.6, 0.6, 1.0, 1.5])
-                c0.markdown(f"<div style='font-size:12px;'>{nome_cognome}</div>", unsafe_allow_html=True)
-                c1.markdown(f"<div style='font-size:11px;color:#64748b;'>@{uname}</div>", unsafe_allow_html=True)
-                c2.markdown(f"<div style='font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' title='{user_email}'>{user_email}</div>", unsafe_allow_html=True)
-                c3.markdown(f"<div style='font-size:10px;color:#94a3b8;'>{created}</div>", unsafe_allow_html=True)
-                c4.markdown(f"<div style='font-size:11px;'>{stato}</div>", unsafe_allow_html=True)
-                with c5:
+                r0, r1, r2, r3, r4, r5, r6 = st.columns([2.2, 1.4, 2.2, 0.8, 0.8, 1.2, 2.2])
+                r0.markdown(f"<div style='{_c_style}'><strong>{nome_cognome}</strong></div>", unsafe_allow_html=True)
+                r1.markdown(f"<div style='{_c_style}color:#64748b;'>{uname}</div>", unsafe_allow_html=True)
+                r2.markdown(f"<div style='{_c_style}color:#64748b;' title='{user_email}'>{user_email}</div>", unsafe_allow_html=True)
+                r3.markdown(f"<div style='font-size:14px;color:#94a3b8;'>{created}</div>", unsafe_allow_html=True)
+                r4.markdown(f"<div style='{_c_style}'>{stato}</div>", unsafe_allow_html=True)
+                with r5:
                     if is_adm:
-                        st.caption("—")
+                        st.markdown(f"<div style='{_c_style}color:#94a3b8;'>—</div>", unsafe_allow_html=True)
                     else:
-                        st.caption(lic_txt)
-                        if st.button("📜", key=f"lic_{uname}", use_container_width=True, help="Genera licenza"):
+                        st.markdown(f"<div style='{_c_style}'>{lic_txt}</div>", unsafe_allow_html=True)
+                        if st.button("Genera licenza", key=f"lic_{uname}", use_container_width=True):
                             st.session_state.admin_gen_lic_user = (uname, nome_cognome)
                             st.rerun()
-                with c6:
-                    _a, _b, _c = st.columns(3)
-                    with _a:
-                        if st.button("✉️", key=f"btn_email_{uname}", use_container_width=True, help="Email"):
+                with r6:
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        if st.button("Email", key=f"btn_email_{uname}", use_container_width=True):
                             st.session_state.set_email_user = uname
                             st.rerun()
-                    with _b:
+                    with col_b:
                         if not is_adm:
-                            _lab = "Off" if attivo else "On"
-                            if st.button(_lab, key=f"toggle_{uname}", use_container_width=True, help="Attiva/Disattiva"):
+                            lab = "Disattiva" if attivo else "Attiva"
+                            if st.button(lab, key=f"toggle_{uname}", use_container_width=True):
                                 _auth.toggle_user_active(uname)
                                 st.toast("Stato aggiornato.", icon="✅")
                                 st.rerun()
-                    with _c:
+                    with col_c:
                         if not is_adm and uname != st.session_state.logged_user:
-                            if st.button("🔑", key=f"reset_{uname}", use_container_width=True, help="Nuova password"):
+                            if st.button("Password", key=f"reset_{uname}", use_container_width=True):
                                 st.session_state.admin_reset_user = uname
                                 st.rerun()
         if st.session_state.get("last_generated_license"):
@@ -1771,7 +1720,7 @@ if st.session_state.show_utility:
                     st.session_state.set_email_user = None
                     st.rerun()
         st.markdown("---")
-        st.markdown("#### ➕ Crea nuovo utente")
+        st.markdown("### ➕ Crea nuovo utente")
         st.caption("I nuovi utenti restano **disattivati** finché non li attivi dall'elenco sopra (pulsante Attiva). Così abiliti l’accesso online solo quando sei pronto.")
         with st.form("admin_nuovo_utente"):
             cn, cc = st.columns(2)
@@ -1800,6 +1749,65 @@ if st.session_state.show_utility:
                     else:
                         st.error(msg)
                     st.rerun()
+
+        # ── IN FONDO: Configurazione e password (expander per non confondere) ──
+        st.markdown("---")
+        with st.expander("⚙️ Configurazione (licenza globale e SMTP)", expanded=False):
+            st.markdown("Chiave licenza dell'installazione e impostazioni email per il recupero password.")
+            _cfg = _auth.get_config()
+            with st.form("admin_config_form"):
+                lic = st.text_input("Chiave licenza", value=_cfg.get("license_key") or "", type="password", placeholder="VLEKT-xxx-xxx (genera dalla tabella utenti sopra)")
+                st.markdown("**SMTP (recupero password)**")
+                smtp_host = st.text_input("Host SMTP", value=_cfg.get("smtp_host") or "smtp.gmail.com", placeholder="es. smtp.gmail.com")
+                smtp_port = st.number_input("Porta SMTP", min_value=1, max_value=65535, value=int(_cfg.get("smtp_port") or 587), step=1)
+                smtp_user = st.text_input("Utente SMTP", value=_cfg.get("smtp_user") or "", placeholder="email o username")
+                smtp_password = st.text_input("Password SMTP", value="", type="password", placeholder="lascia vuoto per non modificare")
+                smtp_use_tls = st.checkbox("Usa TLS", value=bool(_cfg.get("smtp_use_tls", True)))
+                from_name = st.text_input("Nome mittente", value=_cfg.get("from_name") or "", placeholder="es. Software Gestionale AD")
+                from_email = st.text_input("Indirizzo mittente (From)", value=_cfg.get("from_email") or "", placeholder="es. noreply@tuodominio.it")
+                if st.form_submit_button("Salva configurazione"):
+                    pwd_final = _cfg.get("smtp_password") or ""
+                    if (smtp_password or "").strip():
+                        pwd_final = smtp_password
+                    data = {
+                        "license_key": (lic or "").strip(),
+                        "smtp_host": (smtp_host or "").strip(),
+                        "smtp_port": smtp_port,
+                        "smtp_user": (smtp_user or "").strip(),
+                        "smtp_password": pwd_final,
+                        "smtp_use_tls": smtp_use_tls,
+                        "from_name": (from_name or "").strip(),
+                        "from_email": (from_email or "").strip(),
+                    }
+                    ok_cfg, msg_cfg = _auth.save_config(data)
+                    if ok_cfg:
+                        st.toast(msg_cfg, icon="✅")
+                        st.rerun()
+                    else:
+                        st.error(msg_cfg)
+        with st.expander("🔐 Cambia la tua password", expanded=False):
+            with st.form("admin_cambia_pwd"):
+                pwd_attuale = st.text_input("Password attuale", type="password", autocomplete="current-password")
+                pwd_nuova = st.text_input("Nuova password", type="password")
+                pwd_ripeti = st.text_input("Ripeti nuova password", type="password")
+                if st.form_submit_button("Aggiorna password"):
+                    if not pwd_attuale or not pwd_nuova:
+                        st.error("Compila tutti i campi.")
+                    elif pwd_nuova != pwd_ripeti:
+                        st.error("Le password non coincidono.")
+                    elif len(pwd_nuova) < 6:
+                        st.error("La password deve essere di almeno 6 caratteri.")
+                    else:
+                        ok_ver, _ = _auth.verify_login(st.session_state.logged_user, (pwd_attuale or "").strip())
+                        if not ok_ver:
+                            st.error("Password attuale non corretta.")
+                        else:
+                            ok, msg = _auth.change_password(st.session_state.logged_user, pwd_nuova)
+                            if ok:
+                                st.toast(msg, icon="✅")
+                                st.rerun()
+                            else:
+                                st.error(msg)
         st.stop()
 
     st.markdown("<h2 style='color:#2c3e50;font-weight:900;'>🔧 Utility</h2>", unsafe_allow_html=True)

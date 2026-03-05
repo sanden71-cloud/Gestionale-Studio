@@ -10,8 +10,8 @@ Imposta la stessa passphrase in locale e in deploy (es. Streamlit Cloud → Secr
 - In deploy: aggiungi VLEKT_SECRET_KEY nei Secrets dell'app.
 
 Con VLEKT_SECRET_KEY attiva:
-  • Utenti e config sono salvati cifrati in auth/users.enc e auth/config.enc.
-  • Puoi committare e pushare users.enc e config.enc su GitHub: saranno gli stessi in locale e online.
+  • Utenti, config e licenze sono salvati cifrati in auth/users.enc, auth/config.enc e auth/licenses.enc.
+  • Puoi committare e pushare i file .enc su GitHub: saranno gli stessi in locale e online.
   • Crea/modifica utenti e config in un ambiente, fai commit e push; nell'altro fai pull e riavvia.
 - La passphrase non va mai committata: solo nei Secrets / variabili d'ambiente.
 - Senza VLEKT_SECRET_KEY: si usano auth/users.json e auth/config.json (ignorati da Git, solo locale).

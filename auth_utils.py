@@ -21,6 +21,7 @@ CONFIG_FILE = AUTH_DIR / "config.json"
 CONFIG_ENC = AUTH_DIR / "config.enc"
 USERS_ENC = AUTH_DIR / "users.enc"
 LICENSES_FILE = AUTH_DIR / "licenses.json"
+LICENSES_ENC = AUTH_DIR / "licenses.enc"
 
 # Chiave per sincronizzazione sicura locale ↔ deploy (crittografia utenti e config)
 SECRET_KEY_ENV = "VLEKT_SECRET_KEY"
@@ -475,8 +476,37 @@ def _license_signing_secret() -> bytes:
 
 
 def _load_licenses() -> dict:
-    """Carica auth/licenses.json."""
+    """Carica licenze: da licenses.enc se sync attivo, altrimenti da licenses.json."""
     _ensure_dirs()
+    if _sync_key_set():
+        fernet = _get_fernet()
+        legacy = AUTH_DIR / "licenses.json"
+        if fernet and LICENSES_ENC.exists():
+            try:
+                with open(LICENSES_ENC, "rb") as f:
+                    dec = fernet.decrypt(f.read())
+                return json.loads(dec.decode("utf-8"))
+            except Exception:
+                pass
+        if fernet and legacy.exists():
+            try:
+                with open(legacy, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
+                with open(LICENSES_ENC, "wb") as f:
+                    f.write(fernet.encrypt(raw))
+                return data
+            except Exception:
+                pass
+        if LICENSES_ENC.exists():
+            return {"licenses": []}
+        if legacy.exists():
+            try:
+                with open(legacy, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {"licenses": []}
     if not LICENSES_FILE.exists():
         return {"licenses": []}
     try:
@@ -487,8 +517,18 @@ def _load_licenses() -> dict:
 
 
 def _save_licenses(data: dict) -> bool:
-    """Salva auth/licenses.json."""
+    """Salva licenze: in licenses.enc se sync attivo, altrimenti in licenses.json."""
     _ensure_dirs()
+    if _sync_key_set():
+        fernet = _get_fernet()
+        if fernet:
+            try:
+                raw = json.dumps(data, ensure_ascii=False).encode("utf-8")
+                with open(LICENSES_ENC, "wb") as f:
+                    f.write(fernet.encrypt(raw))
+                return True
+            except Exception:
+                return False
     try:
         with open(LICENSES_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
